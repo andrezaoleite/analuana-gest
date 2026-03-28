@@ -179,116 +179,184 @@ function CardTitle({ children }) {
 
 // ── DASHBOARD ─────────────────────────────────────────────
 function DashboardView({ funcionarios }) {
-  const cur = FINANCEIRO[FINANCEIRO.length-1];
-  const prv = FINANCEIRO[FINANCEIRO.length-2];
-  const lucro = cur.receita - cur.despesa;
-  const lucroP = prv.receita - prv.despesa;
+  const [aba, setAba] = useState("geral");
+
+  // ── dados consolidados ──
+  const PC=18, PL=2.80, PCO=2.50;
+  const cur  = FINANCEIRO[FINANCEIRO.length-1];
+  const prv  = FINANCEIRO[FINANCEIRO.length-2];
   const pCur = PRODUCAO[PRODUCAO.length-1];
-  const pPrv = PRODUCAO[PRODUCAO.length-2];
+  const vGado= VENDAS_GADO[VENDAS_GADO.length-1];
+  const prvG = VENDAS_GADO[VENDAS_GADO.length-2];
+  const cCor = CUSTOS_CORTE[CUSTOS_CORTE.length-1];
 
-  return (
+  const recCacau = pCur.cacauKg * PC;
+  const recLeite = pCur.leiteL  * PL;
+  const recCoco  = pCur.cocoUn  * PCO;
+  const recGado  = vGado.total;
+  const recTotal = recCacau + recLeite + recCoco + recGado;
+
+  const cstCorte = cCor.racaoSupl + cCor.medicamentos + cCor.maoDeObra + cCor.outros;
+
+  // Custos estimados por atividade (Mar/25)
+  const cstCacau = 9200;   // insumos + mão de obra cacau
+  const cstLeite = 7400;   // ração vacas leiteiras + mão de obra ordenha
+  const cstCoco  = 4100;   // adubação + colheita
+
+  const lucCacau = recCacau - cstCacau;
+  const lucLeite = recLeite - cstLeite;
+  const lucCoco  = recCoco  - cstCoco;
+  const lucGado  = recGado  - cstCorte;
+  const lucTotal = lucCacau + lucLeite + lucCoco + lucGado;
+
+  // Dados para pizza de receita
+  const receitaPizza = [
+    { name:"🍫 Cacau",       value: recCacau },
+    { name:"🥛 Leite",       value: recLeite },
+    { name:"🥥 Coco",        value: recCoco  },
+    { name:"🐂 Gado Corte",  value: recGado  },
+  ];
+
+  // Dados comparativos por atividade
+  const comparativo = [
+    { ativ:"Cacau",      receita:recCacau, custo:cstCacau, lucro:lucCacau, icon:"🍫", cor:"#d4a017" },
+    { ativ:"Leite",      receita:recLeite, custo:cstLeite, lucro:lucLeite, icon:"🥛", cor:"#2d6a4f" },
+    { ativ:"Coco",       receita:recCoco,  custo:cstCoco,  lucro:lucCoco,  icon:"🥥", cor:"#52b788" },
+    { ativ:"Gado Corte", receita:recGado,  custo:cstCorte, lucro:lucGado,  icon:"🐂", cor:"#457b9d" },
+  ];
+
+  // Evolução receita por atividade (6 meses)
+  const evolReceita = PRODUCAO.map((p,i) => ({
+    mes:    p.mes,
+    Cacau:  p.cacauKg * PC,
+    Leite:  p.leiteL  * PL,
+    Coco:   p.cocoUn  * PCO,
+    Gado:   VENDAS_GADO[i]?.total || 0,
+  }));
+
+  // ── Aba GERAL ──────────────────────────────────────────
+  const TabGeral = () => (
     <div>
-      <SectionHeader title="Dashboard Geral" sub="Resumo consolidado • Março 2025" />
-
-      {/* KPIs */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
-        <KpiCard label="Receita Mar/25"   value={fmt(cur.receita)} sub={`vs ${fmt(prv.receita)} mês ant.`} color="#2d6a4f" icon="💰" trend={cur.receita-prv.receita} />
-        <KpiCard label="Despesas Mar/25"  value={fmt(cur.despesa)} sub={`vs ${fmt(prv.despesa)} mês ant.`} color="#e76f51" icon="📋" trend={-(cur.despesa-prv.despesa)} />
-        <KpiCard label="Lucro Operac."    value={fmt(lucro)}       sub={`vs ${fmt(lucroP)} mês ant.`}      color="#d4a017" icon="📈" trend={lucro-lucroP} />
-        <KpiCard label="Funcionários"     value={funcionarios.length+" ativ."} color="#457b9d" icon="👥" trend={0} />
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:18 }}>
+        <KpiCard label="Receita Total Mar/25"  value={fmt(recTotal)}  sub={`Gado: ${fmt(recGado)}`}          color="#2d6a4f" icon="💰" trend={1}/>
+        <KpiCard label="Despesas Mar/25"       value={fmt(cur.despesa)} sub={`vs ${fmt(prv.despesa)} ant.`}  color="#e76f51" icon="📋" trend={-(cur.despesa-prv.despesa)}/>
+        <KpiCard label="Lucro Consolidado"     value={fmt(lucTotal)}   sub="Todas as atividades"             color="#d4a017" icon="📈" trend={lucTotal>0?1:-1}/>
+        <KpiCard label="Funcionários Ativos"   value={funcionarios.length+" ativ."} color="#457b9d" icon="👥" trend={0}/>
       </div>
 
-      {/* Receita vs Despesa + Pizza */}
-      <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:14, marginBottom:14 }}>
+      {/* Receita vs Despesa */}
+      <div style={{ display:"grid", gridTemplateColumns:"3fr 2fr", gap:14, marginBottom:14 }}>
         <Card>
-          <CardTitle>Receita × Despesa — 6 meses</CardTitle>
+          <CardTitle>Receita por Atividade — 6 meses</CardTitle>
           <ResponsiveContainer width="100%" height={210}>
-            <AreaChart data={FINANCEIRO}>
+            <AreaChart data={evolReceita}>
               <defs>
-                <linearGradient id="gR" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#2d6a4f" stopOpacity={0.25}/>
-                  <stop offset="95%" stopColor="#2d6a4f" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="gD" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#e76f51" stopOpacity={0.25}/>
-                  <stop offset="95%" stopColor="#e76f51" stopOpacity={0}/>
-                </linearGradient>
+                {[["gC","#d4a017"],["gL","#2d6a4f"],["gCo","#52b788"],["gG","#457b9d"]].map(([id,c])=>(
+                  <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={c} stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor={c} stopOpacity={0}/>
+                  </linearGradient>
+                ))}
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-              <XAxis dataKey="mes" tick={{fontSize:12}}/>
-              <YAxis tick={{fontSize:11}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
-              <Tooltip formatter={v=>fmt(v)}/>
-              <Legend/>
-              <Area type="monotone" dataKey="receita" name="Receita" stroke="#2d6a4f" fill="url(#gR)" strokeWidth={2}/>
-              <Area type="monotone" dataKey="despesa" name="Despesa" stroke="#e76f51" fill="url(#gD)" strokeWidth={2}/>
+              <XAxis dataKey="mes" tick={{fontSize:11}}/>
+              <YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+              <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+              <Area type="monotone" dataKey="Cacau" stroke="#d4a017" fill="url(#gC)"  strokeWidth={2}/>
+              <Area type="monotone" dataKey="Leite" stroke="#2d6a4f" fill="url(#gL)"  strokeWidth={2}/>
+              <Area type="monotone" dataKey="Coco"  stroke="#52b788" fill="url(#gCo)" strokeWidth={2}/>
+              <Area type="monotone" dataKey="Gado"  stroke="#457b9d" fill="url(#gG)"  strokeWidth={2}/>
             </AreaChart>
           </ResponsiveContainer>
         </Card>
 
-        <Card>
-          <CardTitle>Distribuição de Despesas</CardTitle>
-          <ResponsiveContainer width="100%" height={150}>
-            <PieChart>
-              <Pie data={DESPESAS_CATEG} cx="50%" cy="50%" innerRadius={38} outerRadius={68} dataKey="value">
-                {DESPESAS_CATEG.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-              </Pie>
-              <Tooltip formatter={v=>fmt(v)}/>
-            </PieChart>
-          </ResponsiveContainer>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:8 }}>
-            {DESPESAS_CATEG.map((d,i)=>(
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:3, fontSize:10, color:"#6b7280" }}>
-                <div style={{ width:7, height:7, borderRadius:2, background:COLORS[i]}}/>
-                {d.name}
-              </div>
-            ))}
-          </div>
-        </Card>
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <Card>
+            <CardTitle>Distribuição de Receita</CardTitle>
+            <ResponsiveContainer width="100%" height={110}>
+              <PieChart>
+                <Pie data={receitaPizza} cx="50%" cy="50%" innerRadius={30} outerRadius={50} dataKey="value">
+                  {receitaPizza.map((_,i)=><Cell key={i} fill={["#d4a017","#2d6a4f","#52b788","#457b9d"][i]}/>)}
+                </Pie>
+                <Tooltip formatter={v=>fmt(v)}/>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginTop:4 }}>
+              {receitaPizza.map((d,i)=>(
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"#374151" }}>
+                  <div style={{ width:8, height:8, borderRadius:2, background:["#d4a017","#2d6a4f","#52b788","#457b9d"][i]}}/>
+                  {d.name} ({((d.value/recTotal)*100).toFixed(0)}%)
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <CardTitle>Distribuição de Despesas</CardTitle>
+            <ResponsiveContainer width="100%" height={110}>
+              <PieChart>
+                <Pie data={DESPESAS_CATEG} cx="50%" cy="50%" innerRadius={30} outerRadius={50} dataKey="value">
+                  {DESPESAS_CATEG.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
+                </Pie>
+                <Tooltip formatter={v=>fmt(v)}/>
+              </PieChart>
+            </ResponsiveContainer>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginTop:4 }}>
+              {DESPESAS_CATEG.slice(0,4).map((d,i)=>(
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"#374151" }}>
+                  <div style={{ width:8, height:8, borderRadius:2, background:COLORS[i]}}/>
+                  {d.name}
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
       </div>
 
-      {/* Produção 6 meses */}
-      <Card>
-        <CardTitle>Produção — 6 meses</CardTitle>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 }}>
-          <div>
-            <div style={{ fontSize:12, color:"#6b7280", marginBottom:6 }}>🍫 Cacau (kg)</div>
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={PRODUCAO} margin={{top:0,right:0,left:-20,bottom:0}}>
-                <XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/>
-                <Tooltip/><Bar dataKey="cacauKg" name="kg" fill="#d4a017" radius={[3,3,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div>
-            <div style={{ fontSize:12, color:"#6b7280", marginBottom:6 }}>🥛 Leite (L)</div>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={PRODUCAO} margin={{top:0,right:0,left:-20,bottom:0}}>
-                <XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/>
-                <Tooltip/>
-                <Line type="monotone" dataKey="leiteL" name="L" stroke="#2d6a4f" strokeWidth={2} dot={{fill:"#2d6a4f",r:3}}/>
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div>
-            <div style={{ fontSize:12, color:"#6b7280", marginBottom:6 }}>🥥 Coco (un)</div>
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={PRODUCAO} margin={{top:0,right:0,left:-20,bottom:0}}>
-                <XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/>
-                <Tooltip/><Bar dataKey="cocoUn" name="un" fill="#52b788" radius={[3,3,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      {/* Comparativo por atividade */}
+      <Card style={{ marginBottom:14 }}>
+        <CardTitle>Receita × Custo × Lucro por Atividade — Mar/25</CardTitle>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={comparativo} margin={{top:0,right:20,left:0,bottom:0}}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+            <XAxis dataKey="ativ" tick={{fontSize:12}}/>
+            <YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+            <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+            <Bar dataKey="receita" name="Receita" fill="#2d6a4f" radius={[3,3,0,0]}/>
+            <Bar dataKey="custo"   name="Custo"   fill="#e76f51" radius={[3,3,0,0]}/>
+            <Bar dataKey="lucro"   name="Lucro"   fill="#d4a017" radius={[3,3,0,0]}/>
+          </BarChart>
+        </ResponsiveContainer>
+
+        {/* Cards de ranking */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginTop:16 }}>
+          {[...comparativo].sort((a,b)=>b.lucro-a.lucro).map((a,i)=>(
+            <div key={i} style={{ padding:12, background:"#f8faf9", borderRadius:8, borderTop:`3px solid ${a.cor}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <span style={{ fontSize:18 }}>{a.icon}</span>
+                <span style={{ fontSize:11, fontWeight:800, color:"#6b7280" }}>#{i+1}</span>
+              </div>
+              <div style={{ fontSize:13, fontWeight:700, color:"#1a1a2e" }}>{a.ativ}</div>
+              <div style={{ fontSize:12, color:"#2d6a4f", marginTop:4 }}>Rec: {fmt(a.receita)}</div>
+              <div style={{ fontSize:12, color:"#e76f51" }}>Cst: {fmt(a.custo)}</div>
+              <div style={{ fontSize:14, fontWeight:800, color: a.lucro>0?"#1b4332":"#dc2626", marginTop:4 }}>
+                {fmt(a.lucro)}
+              </div>
+              <div style={{ fontSize:10, color:"#9ca3af" }}>margem {((a.lucro/a.receita)*100).toFixed(0)}%</div>
+            </div>
+          ))}
         </div>
       </Card>
 
       {/* Alertas */}
-      <Card style={{ marginTop:14, background:"#fffbeb", border:"1px solid #fcd34d" }}>
+      <Card style={{ background:"#fffbeb", border:"1px solid #fcd34d" }}>
         <CardTitle>⚡ Alertas e Pendências</CardTitle>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
           {[
-            { tipo:"💉 Vacina urgente",   desc:"Brucelose Lote C – Bezerros", data:"15/04/25", cor:"#e76f51" },
-            { tipo:"🌿 Rotação de pasto",  desc:"Pasto Norte acima de 90% cap.", data:"Imediato", cor:"#d97706" },
-            { tipo:"📄 Tributação",         desc:"Funrural vence em 30/04/25",    data:"30/04/25", cor:"#457b9d" },
+            { tipo:"💉 Vacina urgente",   desc:"Brucelose Lote C – Bezerros",      data:"15/04/25", cor:"#e76f51" },
+            { tipo:"🐂 Abate previsto",   desc:"3 bois prontos – Confinamento A/B", data:"Abr/25",  cor:"#1b4332" },
+            { tipo:"🌿 Rotação de pasto", desc:"Pasto Norte acima de 90% cap.",     data:"Imediato", cor:"#d97706" },
+            { tipo:"📄 Tributação",        desc:"Funrural vence em 30/04/25",        data:"30/04/25", cor:"#457b9d" },
           ].map((a,i)=>(
             <div key={i} style={{ padding:12, borderRadius:8, borderLeft:`3px solid ${a.cor}`, background:"white" }}>
               <div style={{ fontSize:12, fontWeight:700, color:a.cor }}>{a.tipo}</div>
@@ -298,6 +366,234 @@ function DashboardView({ funcionarios }) {
           ))}
         </div>
       </Card>
+    </div>
+  );
+
+  // ── Aba CACAU ──────────────────────────────────────────
+  const TabCacau = () => {
+    const recMes = PRODUCAO.map(p=>({ mes:p.mes, receita:p.cacauKg*PC, custo:9200, lucro:p.cacauKg*PC-9200 }));
+    return (
+      <div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:18 }}>
+          <KpiCard label="Receita Mar/25" value={fmt(recCacau)} color="#d4a017" icon="🍫" trend={1}/>
+          <KpiCard label="Custo Mar/25"   value={fmt(cstCacau)} color="#e76f51" icon="📋" trend={0}/>
+          <KpiCard label="Lucro Mar/25"   value={fmt(lucCacau)} color="#2d6a4f" icon="📈" trend={lucCacau>0?1:-1}/>
+          <KpiCard label="Margem"         value={`${((lucCacau/recCacau)*100).toFixed(0)}%`} color="#457b9d" icon="📊" trend={0}/>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:14 }}>
+          <Card>
+            <CardTitle>🍫 Receita × Custo × Lucro — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={recMes}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+                <Bar dataKey="receita" name="Receita" fill="#d4a017" radius={[3,3,0,0]}/>
+                <Bar dataKey="custo"   name="Custo"   fill="#e76f51" radius={[3,3,0,0]}/>
+                <Bar dataKey="lucro"   name="Lucro"   fill="#2d6a4f" radius={[3,3,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+          <Card>
+            <CardTitle>Producao (kg) — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={PRODUCAO}>
+                <defs><linearGradient id="gCAC" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#d4a017" stopOpacity={0.3}/><stop offset="95%" stopColor="#d4a017" stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}}/>
+                <Tooltip/>
+                <Area type="monotone" dataKey="cacauKg" name="kg" stroke="#d4a017" fill="url(#gCAC)" strokeWidth={2}/>
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
+        <Card style={{ marginTop:14 }}>
+          <CardTitle>Indicadores de Custo — Cacau</CardTitle>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+            {[
+              { lbl:"Custo/kg produzido",   val:`R$ ${(cstCacau/pCur.cacauKg).toFixed(2)}`, cor:"#e76f51" },
+              { lbl:"Preco medio mercado",  val:"R$ 18,00/kg",                                cor:"#d4a017" },
+              { lbl:"Producao Mar/25",      val:`${fmtN(pCur.cacauKg)} kg`,                  cor:"#2d6a4f" },
+              { lbl:"Receita/ha estimada",  val:fmt(recCacau/80),                             cor:"#457b9d" },
+            ].map((k,i)=>(
+              <div key={i} style={{ padding:14, background:"#f8faf9", borderRadius:8, borderLeft:`3px solid ${k.cor}` }}>
+                <div style={{ fontSize:11, color:"#6b7280" }}>{k.lbl}</div>
+                <div style={{ fontSize:18, fontWeight:700, color:k.cor, marginTop:4 }}>{k.val}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
+  // ── Aba LEITE ──────────────────────────────────────────
+  const TabLeite = () => {
+    const recMes = PRODUCAO.map(p=>({ mes:p.mes, receita:Math.round(p.leiteL*PL), custo:7400, lucro:Math.round(p.leiteL*PL)-7400 }));
+    return (
+      <div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:18 }}>
+          <KpiCard label="Receita Mar/25" value={fmt(recLeite)} color="#2d6a4f" icon="🥛" trend={1}/>
+          <KpiCard label="Custo Mar/25"   value={fmt(cstLeite)} color="#e76f51" icon="📋" trend={0}/>
+          <KpiCard label="Lucro Mar/25"   value={fmt(lucLeite)} color="#d4a017" icon="📈" trend={lucLeite>0?1:-1}/>
+          <KpiCard label="Custo/Litro"    value={`R$ ${(cstLeite/pCur.leiteL).toFixed(2)}`} color="#457b9d" icon="📊" trend={0}/>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:14 }}>
+          <Card>
+            <CardTitle>🥛 Receita × Custo × Lucro — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={recMes}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+                <Bar dataKey="receita" name="Receita" fill="#2d6a4f" radius={[3,3,0,0]}/>
+                <Bar dataKey="custo"   name="Custo"   fill="#e76f51" radius={[3,3,0,0]}/>
+                <Bar dataKey="lucro"   name="Lucro"   fill="#d4a017" radius={[3,3,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+          <Card>
+            <CardTitle>Producao (L) — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={PRODUCAO}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}}/>
+                <Tooltip/>
+                <Line type="monotone" dataKey="leiteL" name="Litros" stroke="#2d6a4f" strokeWidth={2} dot={{fill:"#2d6a4f",r:4}}/>
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
+        <Card style={{ marginTop:14 }}>
+          <CardTitle>Indicadores de Custo — Leite</CardTitle>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+            {[
+              { lbl:"Custo/litro",         val:`R$ ${(cstLeite/pCur.leiteL).toFixed(2)}`,   cor:"#e76f51" },
+              { lbl:"Preco pago/litro",    val:"R$ 2,80",                                    cor:"#2d6a4f" },
+              { lbl:"Litros Mar/25",       val:`${fmtN(pCur.leiteL)} L`,                     cor:"#2d6a4f" },
+              { lbl:"Media litros/vaca",   val:`${(pCur.leiteL/22/30).toFixed(1)} L/dia`,    cor:"#457b9d" },
+            ].map((k,i)=>(
+              <div key={i} style={{ padding:14, background:"#f8faf9", borderRadius:8, borderLeft:`3px solid ${k.cor}` }}>
+                <div style={{ fontSize:11, color:"#6b7280" }}>{k.lbl}</div>
+                <div style={{ fontSize:18, fontWeight:700, color:k.cor, marginTop:4 }}>{k.val}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
+  // ── Aba COCO ──────────────────────────────────────────
+  const TabCoco = () => {
+    const recMes = PRODUCAO.map(p=>({ mes:p.mes, receita:Math.round(p.cocoUn*PCO), custo:4100, lucro:Math.round(p.cocoUn*PCO)-4100 }));
+    return (
+      <div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:18 }}>
+          <KpiCard label="Receita Mar/25" value={fmt(recCoco)} color="#52b788" icon="🥥" trend={1}/>
+          <KpiCard label="Custo Mar/25"   value={fmt(cstCoco)} color="#e76f51" icon="📋" trend={0}/>
+          <KpiCard label="Lucro Mar/25"   value={fmt(lucCoco)} color="#d4a017" icon="📈" trend={lucCoco>0?1:-1}/>
+          <KpiCard label="Custo/coco"     value={`R$ ${(cstCoco/pCur.cocoUn).toFixed(2)}`} color="#457b9d" icon="📊" trend={0}/>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:14 }}>
+          <Card>
+            <CardTitle>🥥 Receita × Custo × Lucro — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={recMes}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+                <Bar dataKey="receita" name="Receita" fill="#52b788" radius={[3,3,0,0]}/>
+                <Bar dataKey="custo"   name="Custo"   fill="#e76f51" radius={[3,3,0,0]}/>
+                <Bar dataKey="lucro"   name="Lucro"   fill="#d4a017" radius={[3,3,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+          <Card>
+            <CardTitle>Producao (un) — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={PRODUCAO}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}}/>
+                <Tooltip/>
+                <Bar dataKey="cocoUn" name="Unidades" fill="#52b788" radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Aba GADO ──────────────────────────────────────────
+  const TabGado = () => {
+    const recMes = VENDAS_GADO.map((v,i)=>({ mes:v.mes, receita:v.total, custo: CUSTOS_CORTE[i].racaoSupl+CUSTOS_CORTE[i].medicamentos+CUSTOS_CORTE[i].maoDeObra+CUSTOS_CORTE[i].outros, lucro:v.total-(CUSTOS_CORTE[i].racaoSupl+CUSTOS_CORTE[i].medicamentos+CUSTOS_CORTE[i].maoDeObra+CUSTOS_CORTE[i].outros) }));
+    return (
+      <div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:18 }}>
+          <KpiCard label="Receita Mar/25" value={fmt(recGado)} sub={`vs ${fmt(prvG.total)} ant.`} color="#457b9d" icon="🐂" trend={recGado-prvG.total}/>
+          <KpiCard label="Custo Mar/25"   value={fmt(cstCorte)} color="#e76f51" icon="📋" trend={0}/>
+          <KpiCard label="Lucro Mar/25"   value={fmt(lucGado)} color="#d4a017" icon="📈" trend={lucGado>0?1:-1}/>
+          <KpiCard label="R$/Arroba"      value={fmt(vGado.valorArroba)} sub="preco mercado" color="#2d6a4f" icon="📊" trend={0}/>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:14 }}>
+          <Card>
+            <CardTitle>🐂 Receita × Custo × Lucro — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={recMes}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+                <Bar dataKey="receita" name="Receita" fill="#457b9d" radius={[3,3,0,0]}/>
+                <Bar dataKey="custo"   name="Custo"   fill="#e76f51" radius={[3,3,0,0]}/>
+                <Bar dataKey="lucro"   name="Lucro"   fill="#2d6a4f" radius={[3,3,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+          <Card>
+            <CardTitle>Arrobas vendidas — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={VENDAS_GADO}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}}/>
+                <Tooltip/>
+                <Bar dataKey="arrobas" name="Arrobas" fill="#457b9d" radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
+  const ABAS = [
+    { id:"geral",  label:"🏠 Geral",         Comp: TabGeral },
+    { id:"cacau",  label:"🍫 Cacau",          Comp: TabCacau },
+    { id:"leite",  label:"🥛 Leite",          Comp: TabLeite },
+    { id:"coco",   label:"🥥 Coco",           Comp: TabCoco  },
+    { id:"gado",   label:"🐂 Gado de Corte",  Comp: TabGado  },
+  ];
+
+  const AbaAtiva = ABAS.find(a=>a.id===aba)?.Comp || TabGeral;
+
+  return (
+    <div>
+      <SectionHeader title="Dashboard" sub="Analise financeira e produtiva por atividade"/>
+
+      {/* Seletor de abas */}
+      <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
+        {ABAS.map(a=>(
+          <button key={a.id} onClick={()=>setAba(a.id)} style={{
+            padding:"9px 18px", border:"none", borderRadius:20, cursor:"pointer", fontSize:13, fontWeight:600,
+            background: aba===a.id ? "#1b4332" : "white",
+            color:      aba===a.id ? "white"   : "#6b7280",
+            boxShadow:  aba===a.id ? "0 2px 8px rgba(27,67,50,0.3)" : "0 1px 3px rgba(0,0,0,0.08)",
+            transition:"all .15s"
+          }}>{a.label}</button>
+        ))}
+      </div>
+
+      <AbaAtiva/>
     </div>
   );
 }
