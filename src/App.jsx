@@ -5,6 +5,55 @@ import {
   Legend, ResponsiveContainer
 } from "recharts";
 
+// ── DADOS GADO DE CORTE ───────────────────────────────────
+const REBANHO_CORTE_INIT = [
+  { id:1,  brinco:"BC-001", categoria:"Boi Gordo",    pesoPrev:480, pesoAtual:512, dtEntrada:"Jan/25", previsaoAbate:"Mai/25", pasto:"Confinamento A", status:"Pronto p/ Abate" },
+  { id:2,  brinco:"BC-002", categoria:"Boi Gordo",    pesoPrev:460, pesoAtual:498, dtEntrada:"Jan/25", previsaoAbate:"Mai/25", pasto:"Confinamento A", status:"Pronto p/ Abate" },
+  { id:3,  brinco:"BC-003", categoria:"Garrote",      pesoPrev:320, pesoAtual:345, dtEntrada:"Fev/25", previsaoAbate:"Ago/25", pasto:"Pasto Leste",   status:"Em engorda"      },
+  { id:4,  brinco:"BC-004", categoria:"Garrote",      pesoPrev:310, pesoAtual:338, dtEntrada:"Fev/25", previsaoAbate:"Ago/25", pasto:"Pasto Leste",   status:"Em engorda"      },
+  { id:5,  brinco:"BC-005", categoria:"Novilha",      pesoPrev:290, pesoAtual:315, dtEntrada:"Mar/25", previsaoAbate:"Set/25", pasto:"Pasto Sul",     status:"Em engorda"      },
+  { id:6,  brinco:"BC-006", categoria:"Novilha",      pesoPrev:280, pesoAtual:302, dtEntrada:"Mar/25", previsaoAbate:"Set/25", pasto:"Pasto Sul",     status:"Em engorda"      },
+  { id:7,  brinco:"BC-007", categoria:"Boi Gordo",    pesoPrev:490, pesoAtual:505, dtEntrada:"Dez/24", previsaoAbate:"Abr/25", pasto:"Confinamento B",status:"Pronto p/ Abate" },
+  { id:8,  brinco:"BC-008", categoria:"Bezerro Rec.", pesoPrev:180, pesoAtual:195, dtEntrada:"Mar/25", previsaoAbate:"Jan/26", pasto:"Piquete 2",     status:"Recria"          },
+  { id:9,  brinco:"BC-009", categoria:"Bezerro Rec.", pesoPrev:175, pesoAtual:188, dtEntrada:"Mar/25", previsaoAbate:"Jan/26", pasto:"Piquete 2",     status:"Recria"          },
+  { id:10, brinco:"BC-010", categoria:"Garrote",      pesoPrev:330, pesoAtual:352, dtEntrada:"Fev/25", previsaoAbate:"Ago/25", pasto:"Pasto Leste",   status:"Em engorda"      },
+];
+
+const VENDAS_GADO = [
+  { mes:"Out", cabecas:4, arrobas:240, valorArroba:310, total:74400  },
+  { mes:"Nov", cabecas:3, arrobas:178, valorArroba:315, total:56070  },
+  { mes:"Dez", cabecas:6, arrobas:372, valorArroba:320, total:119040 },
+  { mes:"Jan", cabecas:5, arrobas:305, valorArroba:318, total:96990  },
+  { mes:"Fev", cabecas:4, arrobas:244, valorArroba:322, total:78568  },
+  { mes:"Mar", cabecas:7, arrobas:434, valorArroba:325, total:141050 },
+];
+
+const CUSTOS_CORTE = [
+  { mes:"Out", racaoSupl:8200, medicamentos:1100, maoDeObra:2400, outros:900  },
+  { mes:"Nov", racaoSupl:7800, medicamentos: 900, maoDeObra:2400, outros:700  },
+  { mes:"Dez", racaoSupl:9100, medicamentos:1300, maoDeObra:2400, outros:1100 },
+  { mes:"Jan", racaoSupl:8600, medicamentos:1000, maoDeObra:2400, outros:800  },
+  { mes:"Fev", racaoSupl:8000, medicamentos: 950, maoDeObra:2400, outros:750  },
+  { mes:"Mar", racaoSupl:9400, medicamentos:1200, maoDeObra:2400, outros:950  },
+];
+
+const VACINAS_CORTE = [
+  { data:"10/04/25", lote:"Confinamento A+B", vacina:"Febre Aftosa",           qtd:9,  status:"Pendente"  },
+  { data:"15/04/25", lote:"Piquete 2",        vacina:"Brucelose + Carbunculo", qtd:2,  status:"Pendente"  },
+  { data:"01/03/25", lote:"Todos",            vacina:"Vermifugacao",            qtd:10, status:"Realizado" },
+  { data:"10/02/25", lote:"Confinamento A",   vacina:"IBR/BVD",                qtd:5,  status:"Realizado" },
+];
+
+const GANHO_PESO = [
+  { mes:"Out", gmDiario:0.82 },
+  { mes:"Nov", gmDiario:0.78 },
+  { mes:"Dez", gmDiario:0.91 },
+  { mes:"Jan", gmDiario:0.88 },
+  { mes:"Fev", gmDiario:0.85 },
+  { mes:"Mar", gmDiario:0.93 },
+];
+
+
 // ── DADOS INICIAIS ────────────────────────────────────────
 const FUNCIONARIOS_INIT = [
   { id: 1, nome: "José da Silva",    cargo: "Gerente de Campo",    salario: 3800 },
@@ -732,6 +781,331 @@ function ImportarView() {
   );
 }
 
+
+// ── GADO DE CORTE ─────────────────────────────────────────
+function GadoCorteView() {
+  const [tab, setTab]     = useState("rebanho");
+  const [rebanho, setRebanho] = useState(REBANHO_CORTE_INIT);
+  const [showAdd, setShowAdd] = useState(false);
+  const [novoAnimal, setNovoAnimal] = useState({ brinco:"", categoria:"Garrote", pesoPrev:"", pesoAtual:"", dtEntrada:"", previsaoAbate:"", pasto:"", status:"Em engorda" });
+
+  const curVenda  = VENDAS_GADO[VENDAS_GADO.length-1];
+  const prvVenda  = VENDAS_GADO[VENDAS_GADO.length-2];
+  const curCusto  = CUSTOS_CORTE[CUSTOS_CORTE.length-1];
+  const totalCustoMes = curCusto.racaoSupl + curCusto.medicamentos + curCusto.maoDeObra + curCusto.outros;
+  const lucroCorte = curVenda.total - totalCustoMes;
+  const prontos   = rebanho.filter(a => a.status === "Pronto p/ Abate").length;
+  const curGM     = GANHO_PESO[GANHO_PESO.length-1].gmDiario;
+
+  const thS = { padding:"9px 12px", textAlign:"left", fontSize:11, color:"#6b7280", fontWeight:600, borderBottom:"1px solid #e5e7eb", background:"#f8faf9" };
+  const tdS = { padding:"10px 12px", fontSize:12, borderBottom:"1px solid #f3f4f6" };
+
+  const statusCor = s => s === "Pronto p/ Abate" ? { bg:"#fee2e2", tx:"#dc2626" }
+                       : s === "Em engorda"       ? { bg:"#fef3c7", tx:"#b45309" }
+                       : s === "Recria"           ? { bg:"#dbeafe", tx:"#1d4ed8" }
+                       : { bg:"#f3f4f6", tx:"#6b7280" };
+
+  const addAnimal = () => {
+    if (!novoAnimal.brinco || !novoAnimal.pesoAtual) return;
+    setRebanho([...rebanho, { id: Date.now(), ...novoAnimal, pesoPrev: Number(novoAnimal.pesoPrev), pesoAtual: Number(novoAnimal.pesoAtual) }]);
+    setNovoAnimal({ brinco:"", categoria:"Garrote", pesoPrev:"", pesoAtual:"", dtEntrada:"", previsaoAbate:"", pasto:"", status:"Em engorda" });
+    setShowAdd(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
+        <span style={{ fontSize:28 }}>🐂</span>
+        <div>
+          <h1 style={{ fontSize:20, fontWeight:800, color:"#1b4332", margin:0 }}>Gado de Corte</h1>
+          <p style={{ fontSize:13, color:"#6b7280", margin:0 }}>Rebanho, engorda, venda e manejo sanitario</p>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, margin:"18px 0" }}>
+        <KpiCard label="Receita Venda Mar/25" value={fmt(curVenda.total)}   sub={`vs ${fmt(prvVenda.total)} mes ant.`} color="#2d6a4f" icon="💰" trend={curVenda.total - prvVenda.total}/>
+        <KpiCard label="Custo Corte Mar/25"   value={fmt(totalCustoMes)}    color="#e76f51" icon="📋" trend={0}/>
+        <KpiCard label="Lucro Corte Mar/25"   value={fmt(lucroCorte)}       color="#d4a017" icon="📈" trend={lucroCorte > 0 ? 1 : -1}/>
+        <KpiCard label="Prontos p/ Abate"     value={`${prontos} animais`}  sub={`GM: ${curGM} kg/dia`} color="#457b9d" icon="🐂" trend={0}/>
+      </div>
+
+      <TabBar tabs={[
+        {id:"rebanho",  label:"Rebanho"},
+        {id:"financeiro",label:"Financeiro"},
+        {id:"sanitario",label:"Agenda Sanitaria"},
+        {id:"engorda",  label:"Desempenho"},
+      ]} active={tab} onChange={setTab}/>
+
+      {/* ── REBANHO ── */}
+      {tab === "rebanho" && (
+        <>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <div style={{ display:"flex", gap:14 }}>
+              {[
+                { lbl:"Total", val:rebanho.length,                                     cor:"#1b4332" },
+                { lbl:"Prontos p/ Abate", val:rebanho.filter(a=>a.status==="Pronto p/ Abate").length, cor:"#dc2626" },
+                { lbl:"Em engorda",       val:rebanho.filter(a=>a.status==="Em engorda").length,       cor:"#b45309" },
+                { lbl:"Recria",           val:rebanho.filter(a=>a.status==="Recria").length,           cor:"#1d4ed8" },
+              ].map((s,i) => (
+                <div key={i} style={{ padding:"6px 14px", background:"white", borderRadius:8, boxShadow:"0 1px 3px rgba(0,0,0,0.08)", borderLeft:`3px solid ${s.cor}` }}>
+                  <span style={{ fontSize:11, color:"#6b7280" }}>{s.lbl}: </span>
+                  <span style={{ fontSize:14, fontWeight:700, color:s.cor }}>{s.val}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setShowAdd(!showAdd)} style={{ padding:"8px 16px", background:"#1b4332", color:"white", border:"none", borderRadius:8, cursor:"pointer", fontSize:13, fontWeight:600 }}>
+              + Animal
+            </button>
+          </div>
+
+          {showAdd && (
+            <div style={{ background:"#f0faf4", border:"1px solid #b7e4c7", borderRadius:10, padding:14, marginBottom:14 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:10 }}>
+                {[["Brinco","brinco","text"],["Peso Prev.(kg)","pesoPrev","number"],["Peso Atual(kg)","pesoAtual","number"],["Pasto/Local","pasto","text"],["Dt. Entrada","dtEntrada","text"],["Prev. Abate","previsaoAbate","text"]].map(([lbl,key,type])=>(
+                  <div key={key}>
+                    <label style={{ fontSize:11, color:"#374151", display:"block", marginBottom:3 }}>{lbl}</label>
+                    <input type={type} value={novoAnimal[key]} onChange={e=>setNovoAnimal({...novoAnimal,[key]:e.target.value})}
+                      style={{ width:"100%", padding:"7px 10px", border:"1px solid #d1d5db", borderRadius:6, fontSize:12, boxSizing:"border-box" }}/>
+                  </div>
+                ))}
+                <div>
+                  <label style={{ fontSize:11, color:"#374151", display:"block", marginBottom:3 }}>Categoria</label>
+                  <select value={novoAnimal.categoria} onChange={e=>setNovoAnimal({...novoAnimal,categoria:e.target.value})}
+                    style={{ width:"100%", padding:"7px 10px", border:"1px solid #d1d5db", borderRadius:6, fontSize:12, boxSizing:"border-box" }}>
+                    {["Boi Gordo","Garrote","Novilha","Bezerro Rec."].map(c=><option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, color:"#374151", display:"block", marginBottom:3 }}>Status</label>
+                  <select value={novoAnimal.status} onChange={e=>setNovoAnimal({...novoAnimal,status:e.target.value})}
+                    style={{ width:"100%", padding:"7px 10px", border:"1px solid #d1d5db", borderRadius:6, fontSize:12, boxSizing:"border-box" }}>
+                    {["Em engorda","Pronto p/ Abate","Recria"].map(s=><option key={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={addAnimal} style={{ padding:"8px 18px", background:"#1b4332", color:"white", border:"none", borderRadius:6, cursor:"pointer", fontWeight:600 }}>Salvar</button>
+                <button onClick={()=>setShowAdd(false)} style={{ padding:"8px 14px", background:"#e5e7eb", border:"none", borderRadius:6, cursor:"pointer" }}>Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ background:"white", borderRadius:12, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.08)" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead><tr>
+                {["Brinco","Categoria","Peso Prev.(kg)","Peso Atual(kg)","GMD est.(kg)","Arroba est.","Entrada","Prev. Abate","Local","Status",""].map((h,i)=>(
+                  <th key={i} style={thS}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {rebanho.map((a,i) => {
+                  const gmd  = a.pesoPrev ? ((a.pesoAtual - a.pesoPrev) / 90).toFixed(2) : "-";
+                  const arrs = (a.pesoAtual / 15).toFixed(1);
+                  const sc   = statusCor(a.status);
+                  return (
+                    <tr key={a.id} style={{ background: i%2 ? "#fafafa" : "white" }}>
+                      <td style={{...tdS, fontWeight:700, color:"#1a1a2e"}}>{a.brinco}</td>
+                      <td style={tdS}>{a.categoria}</td>
+                      <td style={tdS}>{a.pesoPrev} kg</td>
+                      <td style={{...tdS, fontWeight:600, color:"#1b4332"}}>{a.pesoAtual} kg</td>
+                      <td style={tdS}>{gmd} kg</td>
+                      <td style={{...tdS, color:"#d4a017", fontWeight:600}}>{arrs} @</td>
+                      <td style={{...tdS, color:"#6b7280"}}>{a.dtEntrada}</td>
+                      <td style={{...tdS, color:"#374151"}}>{a.previsaoAbate}</td>
+                      <td style={{...tdS, color:"#6b7280"}}>{a.pasto}</td>
+                      <td style={tdS}><span style={{ padding:"3px 9px", borderRadius:10, fontSize:11, fontWeight:600, background:sc.bg, color:sc.tx }}>{a.status}</span></td>
+                      <td style={tdS}><button onClick={()=>setRebanho(rebanho.filter(x=>x.id!==a.id))} style={{ background:"none", border:"none", color:"#e76f51", cursor:"pointer" }}>x</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ background:"#1b4332" }}>
+                  <td colSpan={3} style={{ padding:"10px 12px", color:"white", fontWeight:700, fontSize:13 }}>TOTAIS — {rebanho.length} animais</td>
+                  <td style={{ padding:"10px 12px", color:"#95d5b2", fontWeight:700 }}>{rebanho.reduce((s,a)=>s+a.pesoAtual,0).toLocaleString("pt-BR")} kg</td>
+                  <td colSpan={2} style={{ padding:"10px 12px", color:"#95d5b2", fontWeight:700 }}>{(rebanho.reduce((s,a)=>s+a.pesoAtual,0)/15).toFixed(1)} @ totais</td>
+                  <td colSpan={5}/>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ── FINANCEIRO CORTE ── */}
+      {tab === "financeiro" && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+          <Card>
+            <CardTitle>Receita de Venda de Gado — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={VENDAS_GADO}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/><Legend/>
+                <Bar dataKey="total" name="Receita Total" fill="#1b4332" radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+            <div style={{ marginTop:14, overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                <thead><tr>{["Mes","Cabecas","Arrobas","R$/Arroba","Total"].map((h,i)=><th key={i} style={{ padding:"7px 10px", textAlign:"left", color:"#6b7280", borderBottom:"1px solid #e5e7eb" }}>{h}</th>)}</tr></thead>
+                <tbody>{VENDAS_GADO.map((v,i)=>(
+                  <tr key={i} style={{ background:i%2?"#fafafa":"white" }}>
+                    <td style={{ padding:"7px 10px", fontWeight:600 }}>{v.mes}</td>
+                    <td style={{ padding:"7px 10px" }}>{v.cabecas} cab.</td>
+                    <td style={{ padding:"7px 10px" }}>{v.arrobas} @</td>
+                    <td style={{ padding:"7px 10px", color:"#d4a017", fontWeight:600 }}>{fmt(v.valorArroba)}</td>
+                    <td style={{ padding:"7px 10px", fontWeight:700, color:"#1b4332" }}>{fmt(v.total)}</td>
+                  </tr>
+                ))}</tbody>
+                <tfoot><tr style={{ background:"#1b4332" }}>
+                  <td colSpan={4} style={{ padding:"8px 10px", color:"#95d5b2", fontWeight:700 }}>Total 6 meses</td>
+                  <td style={{ padding:"8px 10px", color:"white", fontWeight:800 }}>{fmt(VENDAS_GADO.reduce((s,v)=>s+v.total,0))}</td>
+                </tr></tfoot>
+              </table>
+            </div>
+          </Card>
+
+          <Card>
+            <CardTitle>Custos de Producao — 6 meses</CardTitle>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={CUSTOS_CORTE}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/><Legend/>
+                <Bar dataKey="racaoSupl"    name="Racao/Supl."   stackId="a" fill="#2d6a4f" radius={[0,0,0,0]}/>
+                <Bar dataKey="medicamentos" name="Medicamentos"   stackId="a" fill="#d4a017"/>
+                <Bar dataKey="maoDeObra"    name="Mao de Obra"    stackId="a" fill="#457b9d"/>
+                <Bar dataKey="outros"       name="Outros"         stackId="a" fill="#e76f51" radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+            <div style={{ marginTop:14, padding:14, background:"#f8faf9", borderRadius:8 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#1b4332", marginBottom:10 }}>Breakdown Mar/25</div>
+              {[
+                { lbl:"Racao e Suplementos", val:curCusto.racaoSupl,    cor:"#2d6a4f" },
+                { lbl:"Medicamentos/Vet.",   val:curCusto.medicamentos, cor:"#d4a017" },
+                { lbl:"Mao de Obra",         val:curCusto.maoDeObra,    cor:"#457b9d" },
+                { lbl:"Outros",              val:curCusto.outros,       cor:"#e76f51" },
+              ].map((c,i)=>(
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #e5e7eb" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ width:10, height:10, borderRadius:2, background:c.cor }}/>
+                    <span style={{ fontSize:12, color:"#374151" }}>{c.lbl}</span>
+                  </div>
+                  <span style={{ fontSize:12, fontWeight:600 }}>{fmt(c.val)}</span>
+                </div>
+              ))}
+              <div style={{ display:"flex", justifyContent:"space-between", marginTop:10 }}>
+                <span style={{ fontWeight:700, color:"#1b4332" }}>Custo Total</span>
+                <span style={{ fontWeight:800, color:"#e76f51" }}>{fmt(totalCustoMes)}</span>
+              </div>
+              <div style={{ marginTop:8, padding:10, background: lucroCorte>0?"#d8f3dc":"#fee2e2", borderRadius:6 }}>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontWeight:700, color: lucroCorte>0?"#1b4332":"#dc2626" }}>Lucro Corte Mar/25</span>
+                  <span style={{ fontWeight:800, color: lucroCorte>0?"#1b4332":"#dc2626" }}>{fmt(lucroCorte)}</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── SANITARIO ── */}
+      {tab === "sanitario" && (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead><tr>{["Data","Lote/Grupo","Vacina/Procedimento","Qtd","Status"].map((h,i)=>(
+              <th key={i} style={thS}>{h}</th>
+            ))}</tr></thead>
+            <tbody>{VACINAS_CORTE.map((v,i)=>{
+              const pend = v.status === "Pendente";
+              return (
+                <tr key={i} style={{ background: i%2?"#fafafa":"white" }}>
+                  <td style={{...tdS, fontWeight:700, color: pend?"#e76f51":"#6b7280"}}>{v.data}</td>
+                  <td style={tdS}>{v.lote}</td>
+                  <td style={tdS}>{v.vacina}</td>
+                  <td style={tdS}>{v.qtd} cab.</td>
+                  <td style={tdS}><span style={{ padding:"3px 10px", borderRadius:10, fontSize:11, fontWeight:600, background:pend?"#fee2e2":"#d8f3dc", color:pend?"#dc2626":"#2d6a4f" }}>{v.status}</span></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+          <div style={{ padding:16, background:"#fffbeb", borderTop:"1px solid #fcd34d" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:"#b45309", marginBottom:8 }}>Protocolo Sanitario Recomendado</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+              {[
+                { ev:"Vermifugacao",         freq:"A cada 90 dias",        obs:"Ivermectina ou Doramectina" },
+                { ev:"Febre Aftosa",         freq:"Maio e Novembro",        obs:"Obrigatoria por lei" },
+                { ev:"Raiva/Carbunculo",     freq:"Anual",                  obs:"Regioes endemicas" },
+                { ev:"Pesagem",              freq:"Mensal",                  obs:"Controle de GMD" },
+                { ev:"Suplementacao Mineral",freq:"Continua (cochos)",      obs:"Sal mineralizado 80g/cab/dia" },
+                { ev:"Casqueamento",         freq:"A cada 6 meses",         obs:"Prevencao de claudicacao" },
+              ].map((p,i)=>(
+                <div key={i} style={{ padding:10, background:"white", borderRadius:6, borderLeft:"2px solid #d4a017" }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#1a1a2e" }}>{p.ev}</div>
+                  <div style={{ fontSize:11, color:"#2d6a4f", marginTop:2 }}>{p.freq}</div>
+                  <div style={{ fontSize:10, color:"#9ca3af", marginTop:3 }}>{p.obs}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ── DESEMPENHO ── */}
+      {tab === "engorda" && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+          <Card>
+            <CardTitle>Ganho de Peso Medio Diario (GMD) — kg/dia</CardTitle>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={GANHO_PESO}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/>
+                <YAxis domain={[0.6,1.1]} tick={{fontSize:11}} tickFormatter={v=>`${v} kg`}/>
+                <Tooltip formatter={v=>`${v} kg/dia`}/>
+                <Line type="monotone" dataKey="gmDiario" name="GMD" stroke="#1b4332" strokeWidth={2} dot={{fill:"#1b4332",r:5}}/>
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{ marginTop:12, padding:12, background:"#f0faf4", borderRadius:8 }}>
+              <div style={{ fontSize:12, color:"#6b7280" }}>Meta: <strong>0,9 kg/dia</strong> (sistema semi-confinado)</div>
+              <div style={{ fontSize:12, color: curGM >= 0.9 ? "#1b4332" : "#e76f51", marginTop:4, fontWeight:600 }}>
+                Atual: {curGM} kg/dia {curGM >= 0.9 ? "✅ Acima da meta" : "⚠️ Abaixo da meta"}
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <CardTitle>Resumo de Arrobas Produzidas</CardTitle>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={VENDAS_GADO}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:11}}/>
+                <Tooltip/><Legend/>
+                <Bar dataKey="arrobas" name="Arrobas vendidas (@)" fill="#d4a017" radius={[4,4,0,0]}/>
+                <Bar dataKey="cabecas" name="Cabecas vendidas" fill="#2d6a4f" radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+            <div style={{ marginTop:12 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#1b4332", marginBottom:8 }}>Indicadores Mar/25</div>
+              {[
+                { lbl:"Cabecas vendidas",   val:`${curVenda.cabecas} cab.`,                                 cor:"#2d6a4f" },
+                { lbl:"Arrobas vendidas",   val:`${curVenda.arrobas} @`,                                    cor:"#d4a017" },
+                { lbl:"Preco medio/@",      val:fmt(curVenda.valorArroba),                                   cor:"#457b9d" },
+                { lbl:"Arrobas em estoque", val:`${(rebanho.reduce((s,a)=>s+a.pesoAtual,0)/15).toFixed(0)} @`, cor:"#1b4332" },
+              ].map((ind,i)=>(
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #f3f4f6" }}>
+                  <span style={{ fontSize:12, color:"#6b7280" }}>{ind.lbl}</span>
+                  <span style={{ fontSize:13, fontWeight:700, color:ind.cor }}>{ind.val}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── USUÁRIOS PERMITIDOS ───────────────────────────────────
 const USUARIOS = [
   { usuario: "admin",   senha: "fazenda2025", nome: "Administrador",  perfil: "Administrador" },
@@ -847,6 +1221,7 @@ export default function App() {
     { id:"financeiro",label:"Financeiro",         icon:"💰" },
     { id:"producao",  label:"Produção",           icon:"📊" },
     { id:"manejo",    label:"Manejo Pecuário",    icon:"🐄" },
+    { id:"gadocorte", label:"Gado de Corte",       icon:"🐂" },
     { id:"importar",  label:"Integração Sheets",  icon:"📁" },
   ];
 
@@ -856,7 +1231,7 @@ export default function App() {
       <div style={{ width:210, background:"#1b4332", color:"white", display:"flex", flexDirection:"column", flexShrink:0 }}>
         <div style={{ padding:"18px 18px 14px", borderBottom:"1px solid #2d6a4f" }}>
           <div style={{ fontSize:15, fontWeight:800, color:"#95d5b2" }}>🌱 FazendaGest</div>
-          <div style={{ fontSize:10, color:"#74c69d", marginTop:2 }}>Cacau · Leite · Coco</div>
+          <div style={{ fontSize:10, color:"#74c69d", marginTop:2 }}>Cacau · Leite · Coco · Gado</div>
         </div>
         <nav style={{ padding:"10px 0", flex:1 }}>
           {items.map(it=>(
@@ -891,6 +1266,7 @@ export default function App() {
         {menu==="financeiro" && <FinanceiroView funcionarios={funcionarios} setFuncionarios={setFuncionarios}/>}
         {menu==="producao"   && <ProducaoView/>}
         {menu==="manejo"     && <ManejoView/>}
+        {menu==="gadocorte" && <GadoCorteView/>}
         {menu==="importar"   && <ImportarView/>}
       </div>
     </div>
