@@ -732,10 +732,115 @@ function ImportarView() {
   );
 }
 
+// ── USUÁRIOS PERMITIDOS ───────────────────────────────────
+const USUARIOS = [
+  { usuario: "admin",   senha: "fazenda2025", nome: "Administrador",  perfil: "Administrador" },
+  { usuario: "gerente", senha: "gerente123",  nome: "Gerente de Campo",perfil: "Gerente"       },
+  { usuario: "contador",senha: "contabil@1",  nome: "Contador",        perfil: "Financeiro"    },
+];
+
+// ── TELA DE LOGIN ─────────────────────────────────────────
+function LoginView({ onLogin }) {
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha]     = useState("");
+  const [erro, setErro]       = useState("");
+  const [showSenha, setShowSenha] = useState(false);
+
+  const handleLogin = () => {
+    const user = USUARIOS.find(u => u.usuario === usuario.trim() && u.senha === senha);
+    if (user) { setErro(""); onLogin(user); }
+    else setErro("Usuário ou senha incorretos.");
+  };
+
+  const handleKey = e => { if (e.key === "Enter") handleLogin(); };
+
+  return (
+    <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#1b4332 0%,#2d6a4f 60%,#52b788 100%)",
+      display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
+
+      {/* Card */}
+      <div style={{ background:"white", borderRadius:20, padding:"44px 40px", width:360,
+        boxShadow:"0 20px 60px rgba(0,0,0,0.35)" }}>
+
+        {/* Logo */}
+        <div style={{ textAlign:"center", marginBottom:32 }}>
+          <div style={{ fontSize:52, marginBottom:8 }}>🌱</div>
+          <div style={{ fontSize:24, fontWeight:800, color:"#1b4332" }}>FazendaGest</div>
+          <div style={{ fontSize:13, color:"#6b7280", marginTop:4 }}>Cacau · Leite · Coco</div>
+        </div>
+
+        {/* Campos */}
+        <div style={{ marginBottom:16 }}>
+          <label style={{ fontSize:12, fontWeight:600, color:"#374151", display:"block", marginBottom:6 }}>Usuário</label>
+          <input
+            value={usuario} onChange={e => setUsuario(e.target.value)} onKeyDown={handleKey}
+            placeholder="Digite seu usuário"
+            style={{ width:"100%", padding:"11px 14px", border:"1px solid #d1d5db", borderRadius:8,
+              fontSize:14, boxSizing:"border-box", outline:"none",
+              borderColor: erro ? "#ef4444" : "#d1d5db" }}
+          />
+        </div>
+
+        <div style={{ marginBottom:10 }}>
+          <label style={{ fontSize:12, fontWeight:600, color:"#374151", display:"block", marginBottom:6 }}>Senha</label>
+          <div style={{ position:"relative" }}>
+            <input
+              type={showSenha ? "text" : "password"}
+              value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={handleKey}
+              placeholder="Digite sua senha"
+              style={{ width:"100%", padding:"11px 40px 11px 14px", border:"1px solid #d1d5db", borderRadius:8,
+                fontSize:14, boxSizing:"border-box", outline:"none",
+                borderColor: erro ? "#ef4444" : "#d1d5db" }}
+            />
+            <button onClick={() => setShowSenha(!showSenha)}
+              style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)",
+                background:"none", border:"none", cursor:"pointer", fontSize:16, color:"#9ca3af" }}>
+              {showSenha ? "🙈" : "👁"}
+            </button>
+          </div>
+        </div>
+
+        {erro && (
+          <div style={{ background:"#fee2e2", border:"1px solid #fca5a5", borderRadius:6,
+            padding:"8px 12px", fontSize:12, color:"#dc2626", marginBottom:12 }}>
+            ⚠️ {erro}
+          </div>
+        )}
+
+        <button onClick={handleLogin}
+          style={{ width:"100%", padding:"13px", background:"#1b4332", color:"white", border:"none",
+            borderRadius:8, fontSize:15, fontWeight:700, cursor:"pointer", marginTop:8,
+            transition:"background .2s" }}
+          onMouseOver={e => e.target.style.background="#2d6a4f"}
+          onMouseOut={e  => e.target.style.background="#1b4332"}>
+          Entrar
+        </button>
+
+        {/* Dica de acesso */}
+        <div style={{ marginTop:24, background:"#f0faf4", borderRadius:8, padding:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#2d6a4f", marginBottom:6 }}>👤 Acessos de demonstração:</div>
+          {USUARIOS.map((u,i) => (
+            <div key={i} style={{ fontSize:11, color:"#6b7280", marginBottom:2 }}>
+              <strong>{u.usuario}</strong> / {u.senha} — <span style={{ color:"#9ca3af" }}>{u.perfil}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ textAlign:"center", marginTop:16, fontSize:11, color:"#9ca3af" }}>
+          v1.0 · FazendaGest © 2025
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── APP ROOT ──────────────────────────────────────────────
 export default function App() {
-  const [menu, setMenu] = useState("dashboard");
+  const [logado, setLogado]       = useState(null);
+  const [menu, setMenu]           = useState("dashboard");
   const [funcionarios, setFuncionarios] = useState(FUNCIONARIOS_INIT);
+
+  if (!logado) return <LoginView onLogin={user => setLogado(user)} />;
 
   const items = [
     { id:"dashboard", label:"Dashboard",         icon:"🏠" },
@@ -767,9 +872,16 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div style={{ padding:"10px 18px", borderTop:"1px solid #2d6a4f", fontSize:10, color:"#52b788" }}>
-          v1.0 · Mar/2025<br/>
-          <span style={{ color:"#74c69d" }}>Dados locais no navegador</span>
+        <div style={{ padding:"12px 18px", borderTop:"1px solid #2d6a4f" }}>
+          <div style={{ fontSize:11, color:"#95d5b2", fontWeight:700 }}>👤 {logado.nome}</div>
+          <div style={{ fontSize:10, color:"#74c69d", marginTop:2 }}>{logado.perfil}</div>
+          <button onClick={() => setLogado(null)}
+            style={{ marginTop:10, width:"100%", padding:"7px", background:"rgba(255,255,255,0.1)",
+              border:"1px solid rgba(255,255,255,0.2)", borderRadius:6, color:"#b7e4c7",
+              fontSize:11, cursor:"pointer", fontWeight:600 }}>
+            🚪 Sair
+          </button>
+          <div style={{ fontSize:9, color:"#52b788", marginTop:8 }}>v1.0 · Mar/2025</div>
         </div>
       </div>
 
