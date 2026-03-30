@@ -540,7 +540,7 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
                 <td colSpan={2} style={{ padding:"10px 12px",color:"white",fontWeight:800 }}>{fmt(totalFolha)}</td>
               </tr>
             </tfoot>
-          </table>
+          </table></div>
           <div style={{ padding:12,background:"#fffbeb",borderTop:"1px solid #fcd34d",fontSize:12,color:"#92400e" }}>
             💡 <strong>Salário Família 2025:</strong> R$ 65,00/filho para funcionários com salário ≤ R$ 1.906,04 (Portaria MPS/MF nº 6/2025). INSS calculado progressivamente: 7,5% até R$1.518 · 9% até R$2.793,88 · 12% até R$4.190,83 · 14% até R$8.157,41.
           </div>
