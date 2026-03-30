@@ -1,9 +1,39 @@
 import { useState, useRef, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer
 } from "recharts";
+
+// ── SUPABASE ──────────────────────────────────────────────
+const supabase = createClient(
+  "https://qgzbeosbttysramlnjeb.supabase.co",
+  "sb_publishable_ikMsKo3jMkrMGwWlz7JvHA_L3HflDR0"
+);
+
+// Converte camelCase → snake_case para salvar no banco
+const toSnake = obj => {
+  if(!obj || typeof obj !== "object") return obj;
+  const out = {};
+  for(const [k,v] of Object.entries(obj)){
+    const sk = k.replace(/[A-Z]/g, c => "_" + c.toLowerCase());
+    out[sk] = v;
+  }
+  return out;
+};
+
+// Converte snake_case → camelCase ao carregar do banco
+const toCamel = obj => {
+  if(!obj || typeof obj !== "object") return obj;
+  const out = {};
+  for(const [k,v] of Object.entries(obj)){
+    const ck = k.replace(/_([a-z])/g, (_,c) => c.toUpperCase());
+    out[ck] = v;
+  }
+  return out;
+};
+
 
 // ── CONSTANTES ────────────────────────────────────────────
 const COLORS = ["#2d6a4f","#52b788","#d4a017","#e76f51","#457b9d","#a8dadc","#f4a261","#264653"];
@@ -904,7 +934,7 @@ function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnim
 }
 
 // ── LANÇAMENTOS (CRUD CENTRAL) ────────────────────────────
-function LancamentosView({ producao, setProducao, despesas, setDespesas, receitas, setReceitas, funcionarios, setFuncionarios, animaisCorte, setAnimaisCorte, vacinas, setVacinas }) {
+function LancamentosView({ producao, setProducao, despesas, setDespesas, receitas, setReceitas, funcionarios, setFuncionarios, animaisCorte, setAnimaisCorte, vacinas, setVacinas, dbAdd, dbUpdate, dbDelete }) {
   const [tab, setTab]         = useState("producao");
   const [modal, setModal]     = useState(null);
   const [editItem, setEditItem]= useState(null);
@@ -912,6 +942,18 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
   const [form, setForm]       = useState({});
   const fileRef               = useRef();
 
+  const tabToTable = {
+    producao:"producao", despesas:"despesas", receitas:"receitas",
+    funcionarios:"funcionarios", corte:"animais_corte", sanitario:"vacinas"
+  };
+  const tabToState = {
+    producao:setProducao, despesas:setDespesas, receitas:setReceitas,
+    funcionarios:setFuncionarios, corte:setAnimaisCorte, sanitario:setVacinas
+  };
+  const tabToData  = {
+    producao:producao, despesas:despesas, receitas:receitas,
+    funcionarios:funcionarios, corte:animaisCorte, sanitario:vacinas
+  };
   const abrirAdd  = () => { setEditItem(null); setForm({ data: hoje() }); setModal(tab); };
   const abrirEdit = (item) => { setEditItem(item); setForm({...item}); setModal(tab); };
   const fechar    = () => { setModal(null); setEditItem(null); setForm({}); };
@@ -925,13 +967,17 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
       msg: editItem ? "Confirmar alteração deste lançamento?" : "Confirmar inclusão do novo lançamento?",
       danger: false,
       onSim: () => {
-        const item = { ...form, id: editItem?.id || uid() };
-        if(tab==="producao")  setProducao(prev  => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
-        if(tab==="despesas")  setDespesas(prev  => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
-        if(tab==="receitas")  setReceitas(prev  => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
-        if(tab==="funcionarios") setFuncionarios(prev => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,{...item,ativo:true}]);
-        if(tab==="corte")     setAnimaisCorte(prev => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
-        if(tab==="sanitario") setVacinas(prev   => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
+        const table = tabToTable[tab];
+        const setState = tabToState[tab];
+        if(editItem) {
+          const item = { ...form, id: editItem.id };
+          if(tab==="funcionarios") dbUpdate(table, item, setState);
+          else dbUpdate(table, item, setState);
+        } else {
+          const item = { ...form, id: uid() };
+          if(tab==="funcionarios") dbAdd(table, {...item, ativo:true}, setState);
+          else dbAdd(table, item, setState);
+        }
         fechar(); setConfirm(null);
       }
     });
@@ -942,12 +988,7 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
       msg: `Deseja excluir permanentemente "${nome}"? Esta ação não pode ser desfeita.`,
       danger: true,
       onSim: () => {
-        if(tab==="producao")   setProducao(prev    => prev.filter(x=>x.id!==id));
-        if(tab==="despesas")   setDespesas(prev    => prev.filter(x=>x.id!==id));
-        if(tab==="receitas")   setReceitas(prev    => prev.filter(x=>x.id!==id));
-        if(tab==="funcionarios") setFuncionarios(prev => prev.filter(x=>x.id!==id));
-        if(tab==="corte")      setAnimaisCorte(prev => prev.filter(x=>x.id!==id));
-        if(tab==="sanitario")  setVacinas(prev     => prev.filter(x=>x.id!==id));
+        dbDelete(tabToTable[tab], id, tabToState[tab]);
         setConfirm(null);
       }
     });
@@ -1419,7 +1460,7 @@ function LoginView({ onLogin, usuarios, nomeFazenda }) {
 }
 
 // ── PASTAGENS ─────────────────────────────────────────────
-function PastagensView({ pastagens, setPastagens }) {
+function PastagensView({ pastagens, setPastagens, dbAdd, dbUpdate, dbDelete }) {
   const mob = useResponsive();
   const [modal, setModal]   = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -1433,12 +1474,13 @@ function PastagensView({ pastagens, setPastagens }) {
   const salvar = () => {
     setConfirm({ msg: editItem?"Confirmar alteração?":"Confirmar inclusão?", danger:false, onSim:() => {
       const item = { ...form, id: editItem?.id || uid(), area:Number(form.area)||0, capacidade:Number(form.capacidade)||0, atual:Number(form.atual)||0 };
-      setPastagens(prev => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
+      if(editItem) dbUpdate("pastagens", item, setPastagens);
+      else dbAdd("pastagens", item, setPastagens);
       fechar(); setConfirm(null);
     }});
   };
   const excluir = (id, nome) => {
-    setConfirm({ msg:`Excluir "${nome}"?`, danger:true, onSim:() => { setPastagens(prev=>prev.filter(x=>x.id!==id)); setConfirm(null); }});
+    setConfirm({ msg:`Excluir "${nome}"?`, danger:true, onSim:() => { dbDelete("pastagens", id, setPastagens); setConfirm(null); }});
   };
 
   const sCor = s => s==="Em uso"?"#2d6a4f":s==="Descanso"?"#457b9d":s==="Em reforma"?"#d4a017":"#e76f51";
@@ -1520,7 +1562,7 @@ function PastagensView({ pastagens, setPastagens }) {
 }
 
 // ── FINANCIAMENTOS ─────────────────────────────────────────
-function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas }) {
+function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, dbAdd, dbUpdate, dbDelete }) {
   const mob = useResponsive();
   const [tab, setTab]       = useState("lista");
   const [modal, setModal]   = useState(false);
@@ -1541,17 +1583,20 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas }) 
   const salvar = () => {
     setConfirm({ msg:editItem?"Confirmar alteração?":"Confirmar inclusão?", danger:false, onSim:() => {
       const item = { ...form, id:editItem?.id||uid(), valor:Number(form.valor), taxa:Number(form.taxa), carencia:Number(form.carencia||0), prazo:Number(form.prazo), pagamentos:editItem?.pagamentos||[] };
-      setFinanciamentos(prev => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
+      if(editItem) dbUpdate("financiamentos", item, setFinanciamentos);
+      else dbAdd("financiamentos", item, setFinanciamentos);
       fechar(); setConfirm(null);
     }});
   };
   const excluir = (id, nome) => {
-    setConfirm({ msg:`Excluir "${nome}"?`, danger:true, onSim:() => { setFinanciamentos(prev=>prev.filter(x=>x.id!==id)); setConfirm(null); }});
+    setConfirm({ msg:`Excluir "${nome}"?`, danger:true, onSim:() => { dbDelete("financiamentos", id, setFinanciamentos); setConfirm(null); }});
   };
   const pagar = (fin, parc) => {
     setConfirm({ msg:`Pagar parcela ${parc.parcela} — ${fmt(parc.prestacao)}? Será lançada como despesa.`, danger:false, onSim:() => {
-      setFinanciamentos(prev=>prev.map(f=>f.id===fin.id?{...f,pagamentos:[...(f.pagamentos||[]),parc.parcela]}:f));
-      setDespesas(prev=>[...prev,{ id:uid(), data:hoje(), categoria:"Financiamentos", subcategoria:"Amortização", valor:parc.prestacao, descricao:`${fin.banco} – Parc.${parc.parcela}/${fin.prazo}`, fornecedor:fin.banco, nf:null }]);
+      const finAtualizado = {...fin, pagamentos:[...(fin.pagamentos||[]),parc.parcela]};
+      dbUpdate("financiamentos", finAtualizado, setFinanciamentos);
+      const desp = { id:uid(), data:hoje(), categoria:"Financiamentos", subcategoria:"Amortização", valor:parc.prestacao, descricao:`${fin.banco} – Parc.${parc.parcela}/${fin.prazo}`, fornecedor:fin.banco, nf:null };
+      dbAdd("despesas", desp, setDespesas);
       setPgModal(null); setConfirm(null);
     }});
   };
@@ -1788,20 +1833,101 @@ function ConfiguracoesView({ config, setConfig }) {
 // ── APP ROOT ──────────────────────────────────────────────
 export default function App() {
   const mob = useResponsive();
-  const [menuAberto, setMenuAberto] = useState(false);
-  const [logado,     setLogado]     = useState(null);
-  const [menu,       setMenu]       = useState("dashboard");
-  const [config,     setConfig]     = useState(CONFIG_INIT);
-  const [usuarios,   setUsuarios]   = useState(USUARIOS_INIT);
-  const [funcionarios,setFuncionarios] = useState(FUNCIONARIOS_INIT);
-  const [producao,   setProducao]   = useState(PRODUCAO_INIT);
-  const [despesas,   setDespesas]   = useState(DESPESAS_INIT);
-  const [receitas,   setReceitas]   = useState(RECEITAS_INIT);
+  const [menuAberto,    setMenuAberto]    = useState(false);
+  const [dbCarregado,   setDbCarregado]   = useState(false);
+  const [logado,        setLogado]        = useState(null);
+  const [menu,          setMenu]          = useState("dashboard");
+  const [config,        setConfig]        = useState(CONFIG_INIT);
+  const [usuarios,      setUsuarios]      = useState(USUARIOS_INIT);
+  const [funcionarios,  setFuncionarios]  = useState(FUNCIONARIOS_INIT);
+  const [producao,      setProducao]      = useState(PRODUCAO_INIT);
+  const [despesas,      setDespesas]      = useState(DESPESAS_INIT);
+  const [receitas,      setReceitas]      = useState(RECEITAS_INIT);
   const [animaisLeiteiro,setAnimaisLeiteiro] = useState(ANIMAIS_LEITEIRO_INIT);
-  const [animaisCorte,   setAnimaisCorte]    = useState(ANIMAIS_CORTE_INIT);
-  const [vacinas,    setVacinas]    = useState(VACINAS_INIT);
-  const [pastagens,  setPastagens]  = useState(PASTAGENS_INIT);
-  const [financiamentos,setFinanciamentos] = useState(FINANCIAMENTOS_INIT);
+  const [animaisCorte,  setAnimaisCorte]  = useState(ANIMAIS_CORTE_INIT);
+  const [vacinas,       setVacinas]       = useState(VACINAS_INIT);
+  const [pastagens,     setPastagens]     = useState(PASTAGENS_INIT);
+  const [financiamentos,setFinanciamentos]= useState(FINANCIAMENTOS_INIT);
+
+  // ── Carregar dados do Supabase ─────────────────────────
+  useEffect(() => {
+    const carregar = async () => {
+      try {
+        const [cfg, func, prod, desp, rec, animL, animC, vac, past, fin] = await Promise.all([
+          supabase.from("config_fazenda").select("*").eq("id","principal").single(),
+          supabase.from("funcionarios").select("*").order("nome"),
+          supabase.from("producao").select("*").order("data", {ascending:false}),
+          supabase.from("despesas").select("*").order("data", {ascending:false}),
+          supabase.from("receitas").select("*").order("data", {ascending:false}),
+          supabase.from("animais_leiteiro").select("*"),
+          supabase.from("animais_corte").select("*"),
+          supabase.from("vacinas").select("*").order("data"),
+          supabase.from("pastagens").select("*").order("nome"),
+          supabase.from("financiamentos").select("*").order("criado_em"),
+        ]);
+        if(cfg.data)    setConfig(c => ({...c, ...toCamel(cfg.data)}));
+        if(func.data?.length)  setFuncionarios(func.data.map(toCamel));
+        if(prod.data?.length)  setProducao(prod.data.map(toCamel));
+        if(desp.data?.length)  setDespesas(desp.data.map(toCamel));
+        if(rec.data?.length)   setReceitas(rec.data.map(toCamel));
+        if(animL.data?.length) setAnimaisLeiteiro(animL.data.map(toCamel));
+        if(animC.data?.length) setAnimaisCorte(animC.data.map(toCamel));
+        if(vac.data?.length)   setVacinas(vac.data.map(toCamel));
+        if(past.data?.length)  setPastagens(past.data.map(toCamel));
+        if(fin.data?.length)   setFinanciamentos(fin.data.map(toCamel));
+      } catch(e) {
+        console.error("Erro ao carregar dados:", e);
+      } finally {
+        setDbCarregado(true);
+      }
+    };
+    carregar();
+  }, []);
+
+  // ── Helpers de persistência ────────────────────────────
+  const dbAdd = async (table, item, setState) => {
+    const row = toSnake({...item});
+    delete row.criado_em;
+    setState(prev => [...prev, item]);
+    const {error} = await supabase.from(table).insert(row);
+    if(error) console.error("dbAdd:", table, error.message);
+  };
+  const dbUpdate = async (table, item, setState) => {
+    setState(prev => prev.map(x => x.id === item.id ? item : x));
+    const row = toSnake({...item});
+    delete row.criado_em;
+    const {error} = await supabase.from(table).update(row).eq("id", item.id);
+    if(error) console.error("dbUpdate:", table, error.message);
+  };
+  const dbDelete = async (table, id, setState) => {
+    setState(prev => prev.filter(x => x.id !== id));
+    const {error} = await supabase.from(table).delete().eq("id", id);
+    if(error) console.error("dbDelete:", table, error.message);
+  };
+  const dbSaveConfig = async (newConfig) => {
+    setConfig(newConfig);
+    const row = {
+      id: "principal",
+      nome_fazenda:  newConfig.nomeFazenda,
+      preco_cacau:   newConfig.precoCacau,
+      preco_leite:   newConfig.precoLeite,
+      preco_coco:    newConfig.precoCoco,
+      preco_arroba:  newConfig.precoArroba,
+      atualizado_em: new Date().toISOString(),
+    };
+    const {error} = await supabase.from("config_fazenda").upsert(row);
+    if(error) console.error("dbSaveConfig:", error.message);
+  };
+
+  if(!dbCarregado) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#f0f4f1",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:12}}>🌱</div>
+        <div style={{color:"#2d6a4f",fontWeight:700,fontSize:16}}>Carregando Fazenda Analuana…</div>
+        <div style={{color:"#9ca3af",fontSize:13,marginTop:6}}>Conectando ao banco de dados</div>
+      </div>
+    </div>
+  );
 
   if(!logado) return <LoginView onLogin={u=>{ setLogado(u); setMenu("dashboard"); }} usuarios={usuarios} nomeFazenda={config.nomeFazenda}/>;
 
@@ -1859,11 +1985,11 @@ export default function App() {
           {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas}/>}
           {menu==="producao"       && <ProducaoView producao={producao}/>}
           {menu==="manejo"         && <ManejoView animaisLeiteiro={animaisLeiteiro} setAnimaisLeiteiro={setAnimaisLeiteiro} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} pastagens={pastagens}/>}
-          {menu==="pastagens"      && <PastagensView pastagens={pastagens} setPastagens={setPastagens}/>}
-          {menu==="financiamentos" && <FinanciamentosView financiamentos={financiamentos} setFinanciamentos={setFinanciamentos} setDespesas={setDespesas}/>}
-          {menu==="lancamentos"    && <LancamentosView producao={producao} setProducao={setProducao} despesas={despesas} setDespesas={setDespesas} receitas={receitas} setReceitas={setReceitas} funcionarios={funcionarios} setFuncionarios={setFuncionarios} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas}/>}
+          {menu==="pastagens"      && <PastagensView pastagens={pastagens} setPastagens={setPastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
+          {menu==="financiamentos" && <FinanciamentosView financiamentos={financiamentos} setFinanciamentos={setFinanciamentos} setDespesas={setDespesas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
+          {menu==="lancamentos"    && <LancamentosView producao={producao} setProducao={setProducao} despesas={despesas} setDespesas={setDespesas} receitas={receitas} setReceitas={setReceitas} funcionarios={funcionarios} setFuncionarios={setFuncionarios} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="usuarios"       && <UsuariosView usuarios={usuarios} setUsuarios={setUsuarios}/>}
-          {menu==="configuracoes"  && <ConfiguracoesView config={config} setConfig={setConfig}/>}
+          {menu==="configuracoes"  && <ConfiguracoesView config={config} setConfig={dbSaveConfig}/>}
         </div>
       </div>
     </div>
