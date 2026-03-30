@@ -195,7 +195,7 @@ function LoginView(){
   const [email,setEmail]=useState("");
   const [senha,setSenha]=useState("");
   const [nome,setNome]=useState("");
-  const [nomeFazenda,setNomeFazenda]=useState("");
+  const [nomeFazenda,setNomeFazenda]=useState(nomeFazendaPre);
   const [loading,setLoading]=useState(false);
   const [erro,setErro]=useState("");
   const [msg,setMsg]=useState("");
@@ -209,21 +209,16 @@ function LoginView(){
   };
 
   const handleSignUp=async()=>{
-    if(!nome.trim()||!nomeFazenda.trim()||!email.trim()||!senha){setErro("Preencha todos os campos.");return;}
+    if(!nome.trim()||!email.trim()||!senha){setErro("Preencha nome, e-mail e senha.");return;}
     if(senha.length<6){setErro("Senha deve ter mínimo 6 caracteres.");return;}
     setLoading(true);setErro("");
-    const {data,error}=await supabase.auth.signUp({email:email.trim(),password:senha,options:{data:{nome}}});
+    const {data,error}=await supabase.auth.signUp({
+      email:email.trim(),password:senha,
+      options:{data:{nome,nomeFazenda}}
+    });
     if(error){setErro(error.message);setLoading(false);return;}
-    if(data.user){
-      // Criar fazenda + perfil + config
-      const {data:faz,error:eFaz}=await supabase.from("fazendas").insert({nome:nomeFazenda.trim(),owner_id:data.user.id}).select().single();
-      if(!eFaz&&faz){
-        await supabase.from("perfis").insert({user_id:data.user.id,fazenda_id:faz.id,nome:nome.trim(),perfil:"Administrador"});
-        await supabase.from("config_fazenda").insert({fazenda_id:faz.id,nome_fazenda:nomeFazenda.trim()});
-      }
-    }
     if(data.session){
-      setMsg("Conta criada! Bem-vindo.");
+      setMsg("Conta criada! Configure sua fazenda a seguir.");
     } else {
       setMsg("Conta criada! Verifique seu e-mail para confirmar o cadastro antes de entrar.");
     }
@@ -259,10 +254,7 @@ function LoginView(){
         {erro&&<div style={{background:"#fee2e2",borderRadius:8,padding:"10px 14px",fontSize:13,color:"#dc2626",marginBottom:16}}>⚠️ {erro}</div>}
 
         {modo==="signup"&&(
-          <>
-            <Campo label="Seu nome completo *" value={nome} onChange={setNome} placeholder="Ex: Maria da Silva"/>
-            <Campo label="Nome da fazenda *" value={nomeFazenda} onChange={setNomeFazenda} placeholder="Ex: Fazenda Analu & Ana"/>
-          </>
+          <Campo label="Seu nome completo *" value={nome} onChange={setNome} placeholder="Ex: Maria da Silva"/>
         )}
 
         <Campo label="E-mail *" value={email} onChange={setEmail} type="email" placeholder="seu@email.com"/>
@@ -299,18 +291,24 @@ function LoginView(){
 
 // Tela de configuração inicial (primeiro acesso com Google)
 function CriarFazendaView({session,onCriada}){
-  const [nome,setNome]=useState(session?.user?.user_metadata?.full_name||session?.user?.user_metadata?.name||"");
+  const [nome,setNome]=useState(
+    session?.user?.user_metadata?.nome||
+    session?.user?.user_metadata?.full_name||
+    session?.user?.user_metadata?.name||""
+  );
+  const [nomeFazendaPre]=useState(session?.user?.user_metadata?.nomeFazenda||"");
   const [nomeFazenda,setNomeFazenda]=useState("");
   const [loading,setLoading]=useState(false);
   const [erro,setErro]=useState("");
 
   const criar=async()=>{
     if(!nome.trim()||!nomeFazenda.trim()){setErro("Preencha todos os campos.");return;}
-    setLoading(true);
-    const {data:faz,error}=await supabase.from("fazendas").insert({nome:nomeFazenda.trim(),owner_id:session.user.id}).select().single();
+    setLoading(true);setErro("");
+    const {data,error}=await supabase.rpc("criar_fazenda_e_perfil",{
+      p_nome_fazenda:nomeFazenda.trim(),
+      p_nome_usuario:nome.trim()
+    });
     if(error){setErro(error.message);setLoading(false);return;}
-    await supabase.from("perfis").insert({user_id:session.user.id,fazenda_id:faz.id,nome:nome.trim(),perfil:"Administrador"});
-    await supabase.from("config_fazenda").insert({fazenda_id:faz.id,nome_fazenda:nomeFazenda.trim()});
     onCriada();
   };
 
