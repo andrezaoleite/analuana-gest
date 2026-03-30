@@ -82,7 +82,7 @@ function useResponsive(){
 
 // ── DADOS INICIAIS ────────────────────────────────────────
 const CONFIG_INIT = {
-  nomeFazenda: "Fazenda Analu & Ana",
+  nomeFazenda: "Fazenda Analuana",
   precoCacau: 18, precoLeite: 2.80, precoCoco: 2.50, precoArroba: 325,
 };
 const USUARIOS_INIT = [
