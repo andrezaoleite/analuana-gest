@@ -228,7 +228,7 @@ function Campo({label,value,onChange,type="text",required=false,options=null,pla
 }
 function KpiCard({label,value,sub,color,icon,trend}){
   return(
-    <div style={{background:"white",borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:}}>
+    <div style={{background:"white",borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:`4px solid ${color}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div>
           <div style={{fontSize:11,color:"#6b7280",marginBottom:3,textTransform:"uppercase",letterSpacing:.5}}>{label}</div>
