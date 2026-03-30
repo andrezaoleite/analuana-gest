@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const COLORS = ["#2d6a4f","#52b788","#d4a017","#e76f51","#457b9d","#a8dadc","#f4a261","#264653"];
-const PC=18, PL=2.80, PCO=2.50;
 const NIVEIS = ["Administrador","Gerente","Financeiro","Operacional"];
 const CAPINS = ["Brachiaria brizantha","Brachiaria decumbens","Brachiaria ruziziensis","Panicum maximum (Mombaça)","Panicum maximum (Tanzania)","Panicum maximum (Massai)","Cynodon (Tifton 85)","Andropogon gayanus","Pennisetum purpureum (Napier)","Megathyrsus maximus (BRS Quênia)","Piatã","Xaraés","Marandu","Nativo/Misto"];
 const STATUS_PASTO = ["Em uso","Descanso","Em reforma","Vedado","Reserva"];
@@ -77,7 +76,7 @@ function calcTabelaPRICE(f){
   return tab;
 }
 
-const CONFIG_INIT={nomeFazenda:"Fazenda Analauna",mapsApiKey:"",lat:-14.86,lng:-39.26,zoom:14};
+const CONFIG_INIT={nomeFazenda:"Fazenda Analu & Ana",precoCacau:18,precoLeite:2.80,precoCoco:2.50,precoArroba:325};
 
 const USUARIOS_INIT=[
   {id:1,usuario:"admin",   senha:"fazenda2025",nome:"Administrador",  perfil:"Administrador",ativo:true},
@@ -169,32 +168,30 @@ const VENDAS_GADO_HIST=[
   {mes:"Mar",cabecas:7,arrobas:434,valorArroba:325,total:141050},
 ];
 
-function useGoogleMaps(apiKey){
-  const [loaded,setLoaded]=useState(false);
+
+
+function useResponsive(){
+  const [mob,setMob]=useState(window.innerWidth<768);
   useEffect(()=>{
-    if(!apiKey){setLoaded(false);return;}
-    if(window.google?.maps){setLoaded(true);return;}
-    const ex=document.querySelector("script[data-gmaps]");
-    if(ex){ex.addEventListener("load",()=>setLoaded(true));return;}
-    const s=document.createElement("script");
-    s.src=`https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-    s.async=true; s.setAttribute("data-gmaps","1");
-    s.onload=()=>setLoaded(true);
-    document.head.appendChild(s);
-  },[apiKey]);
-  return loaded;
+    const h=()=>setMob(window.innerWidth<768);
+    window.addEventListener("resize",h);
+    return ()=>window.removeEventListener("resize",h);
+  },[]);
+  return mob;
 }
 
 // ── COMPONENTES BASE ──────────────────────────────────────
 function Modal({title,children,onClose,largura=500}){
+  const mob=useResponsive();
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div style={{background:"white",borderRadius:14,width:"100%",maxWidth:largura,maxHeight:"90vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:mob?8:16}}>
+      <div style={{background:"white",borderRadius:14,width:"100%",maxWidth:mob?"98vw":largura,maxHeight:"95vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",borderBottom:"1px solid #e5e7eb"}}>
           <span style={{fontSize:15,fontWeight:700,color:"#1b4332"}}>{title}</span>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9ca3af"}}>✕</button>
         </div>
         <div style={{padding:20}}>{children}</div>
+        </div>
       </div>
     </div>
   );
@@ -236,6 +233,7 @@ function KpiCard({label,value,sub,color,icon,trend}){
           {sub&&<div style={{fontSize:11,marginTop:4,color:trend>0?"#2d6a4f":trend<0?"#e63946":"#9ca3af"}}>{trend>0?"▲ ":trend<0?"▼ ":""}{sub}</div>}
         </div>
         <span style={{fontSize:22}}>{icon}</span>
+        </div>
       </div>
     </div>
   );
@@ -254,11 +252,12 @@ const TH=({s})=><th style={{padding:"9px 12px",textAlign:"left",fontSize:11,colo
 const TD=({children,style={}})=><td style={{padding:"9px 12px",fontSize:12,borderBottom:"1px solid #f3f4f6",...style}}>{children}</td>;
 
 // ── DASHBOARD ─────────────────────────────────────────────
-function DashboardView({funcionarios,producao,despesas,receitas,financiamentos}){
+function DashboardView({funcionarios,producao,despesas,receitas,financiamentos,precos}){
   const [aba,setAba]=useState("geral");
+  const mob=useResponsive();
   const sorted=[...producao].sort((a,b)=>b.data.localeCompare(a.data));
   const pCur=sorted[0]||{};const pPrv=sorted[1]||{};
-  const recCacau=(pCur.cacauKg||0)*PC,recLeite=(pCur.leiteL||0)*PL,recCoco=(pCur.cocoUn||0)*PCO;
+  const recCacau=(pCur.cacauKg||0)*(precos?.cacau||18),recLeite=(pCur.leiteL||0)*(precos?.leite||2.80),recCoco=(pCur.cocoUn||0)*(precos?.coco||2.50);
   const recGado=receitas.filter(r=>r.atividade==="Gado Corte").reduce((s,r)=>s+(r.valor||0),0);
   const recTotal=recCacau+recLeite+recCoco+recGado;
   const cstTotal=despesas.reduce((s,d)=>s+(d.valor||0),0);
@@ -278,7 +277,7 @@ function DashboardView({funcionarios,producao,despesas,receitas,financiamentos})
     {ativ:"Coco", receita:recCoco, custo:1800,    lucro:recCoco-1800,     cor:"#52b788",icon:"🥥"},
     {ativ:"Gado", receita:recGado, custo:cstGado, lucro:recGado-cstGado,  cor:"#457b9d",icon:"🐂"},
   ];
-  const hist=producao.slice(-6).map(p=>({mes:p.mes,Cacau:p.cacauKg*PC,Leite:p.leiteL*PL,Coco:p.cocoUn*PCO}));
+  const hist=producao.slice(-6).map(p=>({mes:p.mes,Cacau:p.cacauKg*(precos?.cacau||18),Leite:p.leiteL*(precos?.leite||2.80),Coco:p.cocoUn*(precos?.coco||2.50)}));
   const ABAS=[{id:"geral",label:"🏠 Geral"},{id:"cacau",label:"🍫 Cacau"},{id:"leite",label:"🥛 Leite"},{id:"coco",label:"🥥 Coco"},{id:"gado",label:"🐂 Gado"}];
   return(
     <div>
@@ -288,13 +287,13 @@ function DashboardView({funcionarios,producao,despesas,receitas,financiamentos})
       </div>
       {aba==="geral"&&(
         <div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18}}>
+          <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:14,marginBottom:18}}>
             <KpiCard label="Receita Total" value={fmt(recTotal)} color="#2d6a4f" icon="💰" trend={1}/>
             <KpiCard label="Despesas" value={fmt(cstTotal)} color="#e76f51" icon="📋" trend={0}/>
             <KpiCard label="Lucro" value={fmt(lucTotal)} color={lucTotal>=0?"#d4a017":"#e76f51"} icon="📈" trend={lucTotal>=0?1:-1}/>
             <KpiCard label="Dívida Bancária" value={fmt(dividaTotal)} color="#457b9d" icon="🏦" trend={dividaTotal>0?-1:0}/>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"3fr 2fr",gap:14,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"3fr 2fr",gap:14,marginBottom:14}}>
             <Card>
               <CardTitle>Receita por atividade — histórico</CardTitle>
               <ResponsiveContainer width="100%" height={200}>
@@ -330,9 +329,9 @@ function DashboardView({funcionarios,producao,despesas,receitas,financiamentos})
           </Card>
         </div>
       )}
-      {aba==="cacau"&&<AbaAtiv atv={comp[0]} hist={producao.slice(-6).map(p=>({mes:p.mes,v:p.cacauKg*PC}))}/>}
-      {aba==="leite"&&<AbaAtiv atv={comp[1]} hist={producao.slice(-6).map(p=>({mes:p.mes,v:p.leiteL*PL}))} tipo="line"/>}
-      {aba==="coco" &&<AbaAtiv atv={comp[2]} hist={producao.slice(-6).map(p=>({mes:p.mes,v:p.cocoUn*PCO}))}/>}
+      {aba==="cacau"&&<AbaAtiv atv={comp[0]} hist={producao.slice(-6).map(p=>({mes:p.mes,v:p.cacauKg*(precos?.cacau||18)}))}/>}
+      {aba==="leite"&&<AbaAtiv atv={comp[1]} hist={producao.slice(-6).map(p=>({mes:p.mes,v:p.leiteL*(precos?.leite||2.80)}))} tipo="line"/>}
+      {aba==="coco" &&<AbaAtiv atv={comp[2]} hist={producao.slice(-6).map(p=>({mes:p.mes,v:p.cocoUn*(precos?.coco||2.50)}))}/>}
       {aba==="gado" &&(
         <div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18}}>
@@ -377,13 +376,14 @@ function AbaAtiv({atv,hist,tipo="bar"}){
 // ── FINANCEIRO ────────────────────────────────────────────────────────
 function FinanceiroView({funcionarios,despesas,receitas}){
   const [tab,setTab]=useState("folha");
+  const mob=useResponsive();
   const ativos=funcionarios.filter(f=>f.ativo);
   const totalSalBruto=ativos.reduce((s,f)=>s+(f.salario||0),0);
   const totalEncPatr=totalSalBruto*(0.20+0.08+0.01+0.02+0.1111+0.0833);
   return(
     <div>
       <SecHeader title="Módulo Financeiro" sub="Folha de pagamento, encargos, tributos, despesas e receitas"/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:18}}>
+      <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(3,1fr)",gap:14,marginBottom:18}}>
         <KpiCard label="Total Salários" value={fmt(totalSalBruto)} color="#2d6a4f" icon="👥" trend={0}/>
         <KpiCard label="Encargos Patronais" value={fmt(totalEncPatr)} color="#e76f51" icon="📊" trend={0}/>
         <KpiCard label="Custo Total Folha" value={fmt(totalSalBruto+totalEncPatr)} color="#d4a017" icon="💼" trend={0}/>
@@ -500,11 +500,12 @@ function FinanceiroView({funcionarios,despesas,receitas}){
 }
 
 // ── PRODUÇÃO ──────────────────────────────────────────────
-function ProducaoView({producao}){
+function ProducaoView({producao,precos}){
   const [tab,setTab]=useState("geral");
   const sorted=[...producao].sort((a,b)=>b.data.localeCompare(a.data));
   const cur=sorted[0]||{};const prv=sorted[1]||{};
   const hist6=producao.slice(-6);
+  const PC=precos?.cacau||18,PL=precos?.leite||2.80,PCO=precos?.coco||2.50;
   return(
     <div>
       <SecHeader title="Controle de Produção" sub="Cacau · Leite · Coco · Gado de Corte"/>
@@ -564,12 +565,13 @@ function ProducaoView({producao}){
 // ── MANEJO PECUÁRIO ───────────────────────────────────────
 function ManejoView({animaisLeiteiro,animaisCorte,vacinas,pastagens}){
   const [tab,setTab]=useState("leiteiro");
+  const mob=useResponsive();
   const thS={padding:"9px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,borderBottom:"1px solid #e5e7eb",background:"#f8faf9"};
   const tdS={padding:"10px 12px",fontSize:12,borderBottom:"1px solid #f3f4f6"};
   return(
     <div>
       <SectionHeader title="Manejo Pecuário" sub="Gado leiteiro e gado de corte — agenda sanitária e pastagens"/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18}}>
+      <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:14,marginBottom:18}}>
         <KpiCard label="Gado Leiteiro"    value={`${animaisLeiteiro.reduce((s,a)=>s+a.qtd,0)} cab.`} color="#2d6a4f" icon="🐄" trend={0}/>
         <KpiCard label="Gado de Corte"    value={`${animaisCorte.length} cab.`}                        color="#457b9d" icon="🐂" trend={0}/>
         <KpiCard label="Vacinas Pendentes" value={`${vacinas.filter(v=>v.status==="Pendente").length} eventos`} sub="Próx: 10/04/25" color="#e76f51" icon="💉" trend={-1}/>
@@ -655,12 +657,11 @@ function ManejoView({animaisLeiteiro,animaisCorte,vacinas,pastagens}){
 
 // ── PASTAGENS ─────────────────────────────────────────────────────────
 function PastagensView({pastagens,setPastagens,config}){
-  const [tab,setTab]=useState("lista");
+  const mob=useResponsive();
   const [modal,setModal]=useState(false);
   const [editItem,setEditItem]=useState(null);
   const [form,setForm]=useState({});
   const [confirm,setConfirm]=useState(null);
-  const [mapaModal,setMapaModal]=useState(null);
 
   const abrirAdd=()=>{setEditItem(null);setForm({tipo:"Leiteiro",status:"Em uso"});setModal(true);};
   const abrirEdit=item=>{setEditItem(item);setForm({...item});setModal(true);};
@@ -686,19 +687,18 @@ function PastagensView({pastagens,setPastagens,config}){
 
   return(
     <div>
-      <SecHeader title="Gestão de Pastagens" sub="Cadastro, mapa e controle de ocupação"/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18}}>
+      <SecHeader title="Gestão de Pastagens" sub="Controle de ocupação, tipo de capim e rotação"/>
+      <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:14,marginBottom:18}}>
         <KpiCard label="Área Total" value={`${total.area} ha`} color="#2d6a4f" icon="🌿" trend={0}/>
         <KpiCard label="Capacidade" value={`${total.cap} UA`} color="#52b788" icon="📐" trend={0}/>
         <KpiCard label="Ocupação" value={`${total.atual} cab.`} sub={`${total.cap>0?((total.atual/total.cap)*100).toFixed(0):0}% capacidade`} color="#d4a017" icon="🐄" trend={0}/>
         <KpiCard label="Em Descanso" value={`${pastagens.filter(p=>p.status==="Descanso").length}`} sub="pastagens em rotação" color="#457b9d" icon="✅" trend={0}/>
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <TabBar tabs={[{id:"lista",label:"📋 Lista"},{id:"mapa",label:"🗺️ Mapa"}]} active={tab} onChange={setTab}/>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
         <BotaoP onClick={abrirAdd}>+ Nova Pastagem</BotaoP>
       </div>
       {tab==="lista"&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
+        <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(2,1fr)",gap:14}}>
           {pastagens.map(p=>{
             const ocup=p.capacidade>0?p.atual/p.capacidade:0;
             const sc=sCor(p.status),tc=tCor(p.tipo);
@@ -730,32 +730,14 @@ function PastagensView({pastagens,setPastagens,config}){
                 <div style={{fontSize:11,color:"#9ca3af"}}>{p.capacidade>0?((p.capacidade/p.area).toFixed(1)):0} UA/ha</div>
                 {p.capim&&<div style={{fontSize:11,color:"#6b7280",marginTop:2}}>🌾 {p.capim}</div>}
                 {p.dtPlantio&&<div style={{fontSize:11,color:"#9ca3af"}}>Plantio: {p.dtPlantio}</div>}
-                {config.mapsApiKey&&(
-                  <button onClick={()=>setMapaModal(p)} style={{marginTop:8,padding:"5px 10px",fontSize:11,background:"none",border:"1px solid #b7e4c7",borderRadius:6,cursor:"pointer",color:"#2d6a4f",fontWeight:600}}>
-                    🗺️ {p.coordsJson?"Ver no Mapa":"Demarcar"}
-                  </button>
-                )}
               </Card>
             );
           })}
         </div>
       )}
-      {tab==="mapa"&&(
-        <Card>
-          {!config.mapsApiKey?(
-            <div style={{textAlign:"center",padding:40}}>
-              <div style={{fontSize:40,marginBottom:12}}>🗺️</div>
-              <div style={{fontSize:16,fontWeight:700,color:"#1b4332",marginBottom:8}}>Mapa não configurado</div>
-              <div style={{fontSize:13,color:"#6b7280",marginBottom:16}}>Configure a chave da API do Google Maps em <strong>Configurações do Sistema</strong> para visualizar as pastagens no mapa.</div>
-            </div>
-          ):(
-            <MapaGeral pastagens={pastagens} config={config}/>
-          )}
-        </Card>
-      )}
       {modal&&(
         <Modal title={editItem?"Editar Pastagem":"Nova Pastagem"} onClose={fechar} largura={600}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:0}}>
             {F("Nome *","nome","text",true)}
             {F("Tipo *","tipo","text",true,TIPO_PASTO)}
             {F("Área (ha) *","area","number",true)}
@@ -771,95 +753,13 @@ function PastagensView({pastagens,setPastagens,config}){
           </div>
         </Modal>
       )}
-      {mapaModal&&config.mapsApiKey&&(
-        <MapaDemarcacao pastagem={mapaModal} config={config}
-          onSalvar={coordsJson=>{setPastagens(prev=>prev.map(p=>p.id===mapaModal.id?{...p,coordsJson}:p));setMapaModal(null);}}
-          onFechar={()=>setMapaModal(null)}/>
-      )}
       {confirm&&<Confirm msg={confirm.msg} danger={confirm.danger} onSim={confirm.onSim} onNao={()=>setConfirm(null)}/>}
     </div>
   );
 }
-function MapaDemarcacao({pastagem,config,onSalvar,onFechar}){
-  const mapRef=useRef(null);const mapObj=useRef(null);
-  const mapsLoaded=useGoogleMaps(config.mapsApiKey);
-  const [instrucao,setInstrucao]=useState("Clique no mapa para marcar vértices. Mín. 3 pontos.");
-  const [area,setArea]=useState(null);
-  useEffect(()=>{
-    if(!mapsLoaded||!mapRef.current||mapObj.current) return;
-    const map=new window.google.maps.Map(mapRef.current,{center:{lat:pastagem.lat||config.lat||-14.86,lng:pastagem.lng||config.lng||-39.26},zoom:config.zoom||15,mapTypeId:"satellite"});
-    mapObj.current=map;
-    const pontos=[],mks=[];
-    const poly=new window.google.maps.Polyline({strokeColor:"#d4a017",strokeWeight:2});poly.setMap(map);
-    if(pastagem.coordsJson){
-      try{
-        const coords=JSON.parse(pastagem.coordsJson);
-        const p2=new window.google.maps.Polygon({paths:coords,strokeColor:"#52b788",strokeWeight:2,fillColor:"#52b788",fillOpacity:0.3});p2.setMap(map);
-      }catch(e){}
-    }
-    map.addListener("click",e=>{
-      pontos.push({lat:e.latLng.lat(),lng:e.latLng.lng()});
-      mks.push(new window.google.maps.Marker({position:pontos[pontos.length-1],map,icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:5,fillColor:"#d4a017",fillOpacity:1,strokeWeight:1,strokeColor:"white"}}));
-      poly.setPath(pontos);
-      setInstrucao(`${pontos.length} ponto(s). Continue ou clique "Salvar".`);
-    });
-    const ctrl=document.createElement("div");ctrl.style.cssText="margin:10px;display:flex;gap:8px;";
-    const bs=document.createElement("button");bs.textContent="✅ Salvar";bs.style.cssText="padding:8px 14px;background:#1b4332;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;";
-    bs.onclick=()=>{
-      if(pontos.length<3){alert("Mínimo 3 pontos.");return;}
-      const p3=new window.google.maps.Polygon({paths:[...pontos],strokeColor:"#52b788",strokeWeight:2,fillColor:"#52b788",fillOpacity:0.3});p3.setMap(map);
-      poly.setPath([]);mks.forEach(m=>m.setMap(null));
-      let ha=0;
-      if(window.google.maps.geometry){ha=(window.google.maps.geometry.spherical.computeArea(pontos.map(p=>new window.google.maps.LatLng(p.lat,p.lng)))/10000).toFixed(2);}
-      setArea(ha);setInstrucao(`Demarcação salva! Área: ${ha} ha.`);
-      onSalvar(JSON.stringify(pontos));
-    };
-    const bl=document.createElement("button");bl.textContent="🗑 Limpar";bl.style.cssText="padding:8px 12px;background:#e76f51;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;";
-    bl.onclick=()=>{pontos.length=0;mks.forEach(m=>m.setMap(null));mks.length=0;poly.setPath([]);setArea(null);setInstrucao("Clique no mapa para marcar vértices.");};
-    ctrl.appendChild(bs);ctrl.appendChild(bl);
-    map.controls[window.google.maps.ControlPosition.TOP_CENTER].push(ctrl);
-  },[mapsLoaded]);
-  return(
-    <Modal title={`🗺️ Demarcar — ${pastagem.nome}`} onClose={onFechar} largura={800}>
-      {!mapsLoaded?<div style={{textAlign:"center",padding:40,color:"#6b7280"}}>⏳ Carregando Google Maps…</div>:(
-        <>
-          <div style={{fontSize:12,color:"#6b7280",marginBottom:10,padding:"8px 12px",background:"#f0faf4",borderRadius:6}}>
-            ℹ️ {instrucao}{area&&<span style={{marginLeft:12,color:"#1b4332",fontWeight:700}}>Área: {area} ha</span>}
-          </div>
-          <div ref={mapRef} style={{width:"100%",height:480,borderRadius:8,overflow:"hidden"}}/>
-          <div style={{display:"flex",justifyContent:"flex-end",marginTop:12}}><BotaoSec onClick={onFechar}>✕ Fechar</BotaoSec></div>
-        </>
-      )}
-    </Modal>
-  );
-}
-function MapaGeral({pastagens,config}){
-  const mapRef=useRef(null);const mapsLoaded=useGoogleMaps(config.mapsApiKey);
-  useEffect(()=>{
-    if(!mapsLoaded||!mapRef.current) return;
-    const map=new window.google.maps.Map(mapRef.current,{center:{lat:config.lat||-14.86,lng:config.lng||-39.26},zoom:config.zoom||13,mapTypeId:"satellite"});
-    const tCor=t=>t==="Corte"?"#457b9d":t==="Leiteiro"?"#52b788":t==="Misto"?"#d4a017":"#9ca3af";
-    pastagens.forEach(p=>{
-      if(!p.coordsJson) return;
-      try{
-        const coords=JSON.parse(p.coordsJson);
-        const poly=new window.google.maps.Polygon({paths:coords,strokeColor:tCor(p.tipo),strokeWeight:2,fillColor:tCor(p.tipo),fillOpacity:0.35});
-        poly.setMap(map);
-        const info=new window.google.maps.InfoWindow({content:`<div style="font-size:13px;padding:4px"><strong>${p.nome}</strong><br/>${p.area} ha · ${p.atual}/${p.capacidade} cab.<br/>${p.status}</div>`});
-        poly.addListener("click",e=>info.setPosition(e.latLng)||info.open(map));
-      }catch(e){}
-      if(p.lat&&p.lng){
-        const mk=new window.google.maps.Marker({position:{lat:p.lat,lng:p.lng},map,label:{text:p.nome.slice(0,8),fontSize:"10px",color:"white"},icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:8,fillColor:tCor(p.tipo),fillOpacity:0.8,strokeWeight:1,strokeColor:"white"}});
-      }
-    });
-  },[mapsLoaded,pastagens]);
-  if(!mapsLoaded) return <div style={{textAlign:"center",padding:40,color:"#6b7280"}}>⏳ Carregando mapa…</div>;
-  return <div ref={mapRef} style={{width:"100%",height:520,borderRadius:8,overflow:"hidden"}}/>;
-}
 
 // ── FINANCIAMENTOS ────────────────────────────────────────────────────
 function FinanciamentosView({financiamentos,setFinanciamentos,setDespesas}){
-  const [tab,setTab]=useState("lista");
   const [modal,setModal]=useState(false);
   const [editItem,setEditItem]=useState(null);
   const [form,setForm]=useState({});
@@ -1119,7 +1019,7 @@ function LancamentosView({producao,setProducao,despesas,setDespesas,receitas,set
       <TabBar tabs={[{id:"producao",label:"🌾 Produção"},{id:"despesas",label:"💸 Despesas"},{id:"receitas",label:"💰 Receitas"},{id:"funcionarios",label:"👥 Funcionários"},{id:"corte",label:"🐂 Gado Corte"},{id:"sanitario",label:"💉 Sanitário"}]} active={tab} onChange={setTab}/>
       {tab==="producao"&&(<>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><BotaoAdd label="Nova Produção"/></div>
-        <Card style={{padding:0,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <Card style={{padding:0,overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
           <thead><tr>{["Mês/Data","Cacau (kg)","Leite (L)","Coco (un)","Responsável","Ações"].map((h,i)=><TH key={i} s={h}/>)}</tr></thead>
           <tbody>{[...producao].sort((a,b)=>b.data.localeCompare(a.data)).map((p,i)=>(
             <tr key={p.id} style={{background:i%2?"#fafafa":"white"}}>
@@ -1128,11 +1028,11 @@ function LancamentosView({producao,setProducao,despesas,setDespesas,receitas,set
               <TD><div style={{display:"flex",gap:6}}><BotaoEdit onClick={()=>abrirEdit(p)}/><BotaoDel onClick={()=>excluir(p.id,p.mes||p.data)}>🗑</BotaoDel></div></TD>
             </tr>
           ))}</tbody>
-        </table></Card>
+        </table></div></Card>
       </>)}
       {tab==="despesas"&&(<>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><BotaoAdd label="Nova Despesa"/></div>
-        <Card style={{padding:0,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <Card style={{padding:0,overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
           <thead><tr>{["Data","Categoria","Sub.","Descrição","Fornecedor","Valor","NF","Ações"].map((h,i)=><TH key={i} s={h}/>)}</tr></thead>
           <tbody>{[...despesas].sort((a,b)=>b.data.localeCompare(a.data)).map((d,i)=>(
             <tr key={d.id} style={{background:i%2?"#fafafa":"white"}}>
@@ -1144,11 +1044,11 @@ function LancamentosView({producao,setProducao,despesas,setDespesas,receitas,set
             </tr>
           ))}</tbody>
           <tfoot><tr style={{background:"#1b4332"}}><td colSpan={5} style={{padding:"9px 12px",color:"#95d5b2",fontWeight:700}}>Total</td><td style={{padding:"9px 12px",color:"white",fontWeight:800}}>{fmt(despesas.reduce((s,d)=>s+Number(d.valor||0),0))}</td><td colSpan={2}/></tr></tfoot>
-        </table></Card>
+        </table></div></Card>
       </>)}
       {tab==="receitas"&&(<>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><BotaoAdd label="Nova Receita"/></div>
-        <Card style={{padding:0,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <Card style={{padding:0,overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
           <thead><tr>{["Data","Atividade","Qtd","Unitário","Valor","Comprador","Ações"].map((h,i)=><TH key={i} s={h}/>)}</tr></thead>
           <tbody>{[...receitas].sort((a,b)=>b.data.localeCompare(a.data)).map((r,i)=>(
             <tr key={r.id} style={{background:i%2?"#fafafa":"white"}}>
@@ -1159,11 +1059,11 @@ function LancamentosView({producao,setProducao,despesas,setDespesas,receitas,set
             </tr>
           ))}</tbody>
           <tfoot><tr style={{background:"#1b4332"}}><td colSpan={4} style={{padding:"9px 12px",color:"#95d5b2",fontWeight:700}}>Total</td><td style={{padding:"9px 12px",color:"white",fontWeight:800}}>{fmt(receitas.reduce((s,r)=>s+Number(r.valor||0),0))}</td><td colSpan={2}/></tr></tfoot>
-        </table></Card>
+        </table></div></Card>
       </>)}
       {tab==="funcionarios"&&(<>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><BotaoAdd label="Novo Funcionário"/></div>
-        <Card style={{padding:0,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <Card style={{padding:0,overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
           <thead><tr>{["Nome","Cargo","Atividade","Salário","Filhos","Sal. Família","Status","Ações"].map((h,i)=><TH key={i} s={h}/>)}</tr></thead>
           <tbody>{funcionarios.map((f,i)=>{const sf=calcSalFamilia(f.salario,f.numFilhos||0);return(
             <tr key={f.id} style={{background:i%2?"#fafafa":"white"}}>
@@ -1175,11 +1075,11 @@ function LancamentosView({producao,setProducao,despesas,setDespesas,receitas,set
             </tr>
           );})}
           </tbody>
-        </table></Card>
+        </table></div></Card>
       </>)}
       {tab==="corte"&&(<>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><BotaoAdd label="Novo Animal"/></div>
-        <Card style={{padding:0,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <Card style={{padding:0,overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
           <thead><tr>{["Brinco","Categoria","Peso Prev.","Peso Atual","Arrobas","Entrada","Prev.Abate","Status","Ações"].map((h,i)=><TH key={i} s={h}/>)}</tr></thead>
           <tbody>{animaisCorte.map((a,i)=>{
             const cor=a.status==="Pronto p/ Abate"?"#dc2626":a.status==="Em engorda"?"#b45309":"#1d4ed8";
@@ -1195,11 +1095,11 @@ function LancamentosView({producao,setProducao,despesas,setDespesas,receitas,set
               </tr>
             );
           })}</tbody>
-        </table></Card>
+        </table></div></Card>
       </>)}
       {tab==="sanitario"&&(<>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><BotaoAdd label="Novo Evento Sanitário"/></div>
-        <Card style={{padding:0,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <Card style={{padding:0,overflow:"hidden"}}><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
           <thead><tr>{["Data","Rebanho","Lote","Vacina","Qtd","Custo","Status","Ações"].map((h,i)=><TH key={i} s={h}/>)}</tr></thead>
           <tbody>{[...vacinas].sort((a,b)=>a.data.localeCompare(b.data)).map((v,i)=>{const pend=v.status==="Pendente";return(
             <tr key={v.id} style={{background:i%2?"#fafafa":"white"}}>
@@ -1211,7 +1111,7 @@ function LancamentosView({producao,setProducao,despesas,setDespesas,receitas,set
             </tr>
           );})}
           </tbody>
-        </table></Card>
+        </table></div></Card>
       </>)}
       {modal==="producao"&&(<Modal title={editItem?"Editar Produção":"Nova Produção"} onClose={fechar} largura={520}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>{F("Data *","data","date",true)}{F("Mês ref.","mes")}{F("Cacau (kg) *","cacauKg","number",true)}{F("Leite (L) *","leiteL","number",true)}{F("Coco (un) *","cocoUn","number",true)}{F("Responsável","responsavel")}</div>
@@ -1338,64 +1238,54 @@ function UsuariosView({usuarios,setUsuarios}){
 function ConfiguracoesView({config,setConfig}){
   const [form,setForm]=useState({...config});
   const [salvo,setSalvo]=useState(false);
-  const [testeMapa,setTesteMapa]=useState(false);
-  const mapsLoaded=useGoogleMaps(testeMapa?form.mapsApiKey:"");
-  const mapaTesteRef=useRef(null);
-  useEffect(()=>{
-    if(!testeMapa||!mapsLoaded||!mapaTesteRef.current) return;
-    new window.google.maps.Map(mapaTesteRef.current,{center:{lat:Number(form.lat)||-14.86,lng:Number(form.lng)||-39.26},zoom:Number(form.zoom)||14,mapTypeId:"satellite"});
-  },[testeMapa,mapsLoaded]);
   const salvar=()=>{
-    setConfig({...form,lat:Number(form.lat),lng:Number(form.lng),zoom:Number(form.zoom)});
+    setConfig({
+      ...form,
+      precoCacau:Number(form.precoCacau)||18,
+      precoLeite:Number(form.precoLeite)||2.80,
+      precoCoco:Number(form.precoCoco)||2.50,
+      precoArroba:Number(form.precoArroba)||325,
+    });
     setSalvo(true);setTimeout(()=>setSalvo(false),3000);
   };
   const F=(label,campo,type="text",ph="")=><Campo label={label} value={form[campo]||""} onChange={v=>setForm({...form,[campo]:v})} type={type} placeholder={ph}/>;
+  const mob=window.innerWidth<768;
   return(
     <div>
       <SecHeader title="⚙️ Configurações do Sistema" sub="Apenas Administradores têm acesso"/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+      <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:20}}>
         <div>
           <Card style={{marginBottom:16}}>
             <CardTitle>🌱 Identificação da Fazenda</CardTitle>
             {F("Nome da fazenda","nomeFazenda","text","Ex: Fazenda Analu & Ana")}
           </Card>
           <Card>
-            <CardTitle>🗺️ API Google Maps</CardTitle>
-            <div style={{marginBottom:12,padding:12,background:"#fffbeb",borderRadius:8,fontSize:12,color:"#92400e",lineHeight:1.6}}>
-              <strong>Como obter a chave:</strong><br/>
-              1. Acesse <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{color:"#1b4332"}}>console.cloud.google.com</a><br/>
-              2. Crie/selecione um projeto → "APIs e Serviços" → "Credenciais"<br/>
-              3. Clique "Criar credenciais" → "Chave de API"<br/>
-              4. Ative as APIs: <strong>Maps JavaScript API</strong> e <strong>Geometry Library</strong>
+            <CardTitle>💰 Preços Base das Commodities</CardTitle>
+            <div style={{fontSize:12,color:"#6b7280",marginBottom:14,padding:"10px 12px",background:"#f0faf4",borderRadius:8,lineHeight:1.6}}>
+              Atualize os preços conforme negociação com compradores. Todos os cálculos de receita e lucro do Dashboard serão recalculados automaticamente.
             </div>
-            <Campo label="Chave da API Google Maps" value={form.mapsApiKey||""} onChange={v=>setForm({...form,mapsApiKey:v})} placeholder="AIzaSy..."/>
-            {form.mapsApiKey&&(
-              <div style={{marginTop:8}}>
-                <button onClick={()=>setTesteMapa(t=>!t)} style={{padding:"7px 14px",background:"none",border:"1px solid #b7e4c7",borderRadius:6,cursor:"pointer",color:"#2d6a4f",fontSize:12,fontWeight:600}}>
-                  {testeMapa?"🙈 Ocultar teste":"🗺️ Testar chave"}
-                </button>
-                {testeMapa&&<>
-                  {!mapsLoaded&&<div style={{padding:16,textAlign:"center",color:"#6b7280",fontSize:13}}>⏳ Carregando…</div>}
-                  <div ref={mapaTesteRef} style={{width:"100%",height:200,borderRadius:8,overflow:"hidden",marginTop:8,display:mapsLoaded?"block":"none"}}/>
-                  {mapsLoaded&&<div style={{fontSize:11,color:"#2d6a4f",marginTop:4}}>✅ Chave funcionando corretamente!</div>}
-                </>}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+              {F("🍫 Cacau (R$/kg)","precoCacau","number","18.00")}
+              {F("🥛 Leite (R$/litro)","precoLeite","number","2.80")}
+              {F("🥥 Coco (R$/unidade)","precoCoco","number","2.50")}
+              {F("🐂 Arroba do Boi (R$/@)","precoArroba","number","325.00")}
+            </div>
+            <div style={{marginTop:4,padding:"10px 12px",background:"#f8faf9",borderRadius:8,fontSize:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {[["🍫 Cacau",`R$ ${Number(form.precoCacau||18).toFixed(2)}/kg`],["🥛 Leite",`R$ ${Number(form.precoLeite||2.80).toFixed(2)}/L`],["🥥 Coco",`R$ ${Number(form.precoCoco||2.50).toFixed(2)}/un`],["🐂 Arroba",`R$ ${Number(form.precoArroba||325).toFixed(2)}/@`]].map(([l,v],i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #f3f4f6"}}>
+                    <span style={{color:"#6b7280"}}>{l}</span><span style={{fontWeight:700,color:"#1b4332"}}>{v}</span>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </Card>
         </div>
         <div>
-          <Card style={{marginBottom:16}}>
-            <CardTitle>📍 Centro da Fazenda no Mapa</CardTitle>
-            <div style={{fontSize:12,color:"#6b7280",marginBottom:12}}>Centro inicial do mapa de pastagens. Dica: abra o Google Maps, clique com botão direito na fazenda e copie as coordenadas.</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
-              {F("Latitude","lat","number","-14.86")}{F("Longitude","lng","number","-39.26")}
-            </div>
-            {F("Zoom padrão (13–16)","zoom","number","14")}
-          </Card>
           <Card>
             <CardTitle>ℹ️ Sobre o Sistema</CardTitle>
             <div style={{display:"grid",gap:8,fontSize:13}}>
-              {[["Versão","v3.0 — Abr/2025"],["Módulos","Dashboard, Financeiro, Produção, Manejo, Pastagens, Financiamentos, Lançamentos, Usuários"],["INSS 2025","Progressivo (Port. MPS/MF nº6/2025)"],["Sal. Família","R$ 65,00/filho para sal. ≤ R$ 1.906,04"],["Dados","Sessão do navegador (React state)"]].map(([l,v],i)=>(
+              {[["Versão","v3.1 — Abr/2025"],["Módulos","Dashboard, Financeiro, Produção, Manejo, Pastagens, Financiamentos, Lançamentos, Usuários"],["INSS 2025","Progressivo (Port. MPS/MF nº6/2025)"],["Sal. Família","R$ 65,00/filho para sal. ≤ R$ 1.906,04"],["Dados","Sessão do navegador (React state)"]].map(([l,v],i)=>(
                 <div key={i} style={{padding:"7px 0",borderBottom:"1px solid #f3f4f6"}}>
                   <div style={{fontSize:11,color:"#6b7280"}}>{l}</div>
                   <div style={{fontSize:12,color:"#374151",marginTop:2}}>{v}</div>
@@ -1406,14 +1296,15 @@ function ConfiguracoesView({config,setConfig}){
         </div>
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",gap:12,marginTop:20}}>
-        {salvo&&<span style={{padding:"9px 16px",background:"#d8f3dc",borderRadius:8,fontSize:13,color:"#1b4332",fontWeight:600}}>✅ Salvo!</span>}
+        {salvo&&<span style={{padding:"9px 16px",background:"#d8f3dc",borderRadius:8,fontSize:13,color:"#1b4332",fontWeight:600}}>✅ Preços e configurações salvos!</span>}
         <BotaoP onClick={salvar}>💾 Salvar Configurações</BotaoP>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── LOGIN ─────────────────────────────────────────────────
+// ── LOGIN// ── LOGIN ─────────────────────────────────────────────────
 function LoginView({onLogin,usuarios,nomeFazenda}){
   const [usuario,setUsuario]=useState("");
   const [senha,setSenha]=useState("");
@@ -1448,12 +1339,15 @@ function LoginView({onLogin,usuarios,nomeFazenda}){
           <div style={{fontSize:11,fontWeight:700,color:"#2d6a4f",marginBottom:5}}>Acessos disponíveis:</div>
           {usuarios.filter(u=>u.ativo!==false).map((u,i)=><div key={i} style={{fontSize:11,color:"#6b7280",marginBottom:2}}><strong>{u.usuario}</strong> — {u.perfil}</div>)}
         </div>
+        </div>
       </div>
     </div>
   );
 }
 // ── APP ROOT ──────────────────────────────────────────────
 export default function App(){
+  const mob=useResponsive();
+  const [menuAberto,setMenuAberto]=useState(false);
   const [logado,setLogado]=useState(null);
   const [menu,setMenu]=useState("dashboard");
   const [config,setConfig]=useState(CONFIG_INIT);
@@ -1486,35 +1380,47 @@ export default function App(){
 
   return(
     <div style={{display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#f0f4f1",fontSize:14}}>
-      <div style={{width:215,background:"#1b4332",color:"white",display:"flex",flexDirection:"column",flexShrink:0}}>
-        <div style={{padding:"16px 18px 12px",borderBottom:"1px solid #2d6a4f"}}>
-          <div style={{fontSize:13,fontWeight:800,color:"#95d5b2"}}>🌱 {config.nomeFazenda||"FazendaGest"}</div>
-          <div style={{fontSize:10,color:"#74c69d",marginTop:2}}>Cacau · Leite · Coco · Gado</div>
+      {/* Overlay mobile */}
+      {mob&&menuAberto&&<div onClick={()=>setMenuAberto(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:90}}/>}
+      <div style={{width:mob?180:215,background:"#1b4332",color:"white",display:"flex",flexDirection:"column",flexShrink:0,position:mob?"fixed":"relative",height:"100vh",zIndex:mob?100:1,left:mob&&!menuAberto?-180:0,transition:"left 0.25s ease"}}>
+        <div style={{padding:"14px 16px 10px",borderBottom:"1px solid #2d6a4f",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:12,fontWeight:800,color:"#95d5b2"}}>🌱 {config.nomeFazenda||"FazendaGest"}</div>
+            <div style={{fontSize:9,color:"#74c69d",marginTop:1}}>Cacau · Leite · Coco · Gado</div>
+          </div>
+          {mob&&<button onClick={()=>setMenuAberto(false)} style={{background:"none",border:"none",color:"#b7e4c7",fontSize:18,cursor:"pointer",padding:4}}>✕</button>}
         </div>
         <nav style={{padding:"8px 0",flex:1,overflowY:"auto"}}>
           {MENU_ITEMS.map(it=>(
-            <button key={it.id} onClick={()=>setMenu(it.id)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"10px 18px",border:"none",cursor:"pointer",background:menu===it.id?"#2d6a4f":"transparent",color:menu===it.id?"#d8f3dc":"#b7e4c7",fontSize:12,fontWeight:menu===it.id?700:400,textAlign:"left",borderLeft:`3px solid ${menu===it.id?"#52b788":"transparent"}`}}>
+            <button key={it.id} onClick={()=>{setMenu(it.id);setMenuAberto(false);}} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"10px 16px",border:"none",cursor:"pointer",background:menu===it.id?"#2d6a4f":"transparent",color:menu===it.id?"#d8f3dc":"#b7e4c7",fontSize:12,fontWeight:menu===it.id?700:400,textAlign:"left",borderLeft:`3px solid ${menu===it.id?"#52b788":"transparent"}`}}>
               <span>{it.icon}</span>{it.label}
             </button>
           ))}
         </nav>
-        <div style={{padding:"12px 18px",borderTop:"1px solid #2d6a4f"}}>
+        <div style={{padding:"10px 16px",borderTop:"1px solid #2d6a4f"}}>
           <div style={{fontSize:11,color:nivelCor(logado.perfil),fontWeight:700}}>👤 {logado.nome}</div>
           <div style={{fontSize:10,color:"#74c69d",marginTop:2}}>{logado.perfil}</div>
-          <button onClick={()=>setLogado(null)} style={{marginTop:10,width:"100%",padding:"7px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:6,color:"#b7e4c7",fontSize:11,cursor:"pointer",fontWeight:600}}>🚪 Sair</button>
-          <div style={{fontSize:9,color:"#52b788",marginTop:6}}>v3.0 · Abr/2025</div>
+          <button onClick={()=>setLogado(null)} style={{marginTop:8,width:"100%",padding:"7px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:6,color:"#b7e4c7",fontSize:11,cursor:"pointer",fontWeight:600}}>🚪 Sair</button>
+          <div style={{fontSize:9,color:"#52b788",marginTop:4}}>v3.1 · Abr/2025</div>
         </div>
       </div>
-      <div style={{flex:1,overflow:"auto",padding:22}}>
-        {menu==="dashboard"      &&<DashboardView funcionarios={funcionarios} producao={producao} despesas={despesas} receitas={receitas} financiamentos={financiamentos}/>}
+      <div style={{flex:1,overflow:"auto",display:"flex",flexDirection:"column"}}>
+        {mob&&<div style={{background:"#1b4332",padding:"10px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <button onClick={()=>setMenuAberto(true)} style={{background:"none",border:"none",color:"white",fontSize:22,cursor:"pointer",padding:0,lineHeight:1}}>☰</button>
+          <span style={{color:"#95d5b2",fontWeight:700,fontSize:13}}>🌱 {config.nomeFazenda||"FazendaGest"}</span>
+          <span style={{color:"#74c69d",fontSize:11,marginLeft:"auto"}}>{MENU_ITEMS.find(m=>m.id===menu)?.label}</span>
+        </div>}
+        <div style={{flex:1,overflow:"auto",padding:mob?14:22}}>
+        {menu==="dashboard"      &&<DashboardView funcionarios={funcionarios} producao={producao} despesas={despesas} receitas={receitas} financiamentos={financiamentos} precos={{cacau:config.precoCacau||18,leite:config.precoLeite||2.80,coco:config.precoCoco||2.50,arroba:config.precoArroba||325}}/>}
         {menu==="financeiro"     &&<FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas}/>}
-        {menu==="producao"       &&<ProducaoView producao={producao}/>}
+        {menu==="producao"       &&<ProducaoView producao={producao} precos={{cacau:config.precoCacau||18,leite:config.precoLeite||2.80,coco:config.precoCoco||2.50,arroba:config.precoArroba||325}}/>}
         {menu==="manejo"         &&<ManejoView animaisLeiteiro={animaisLeiteiro} animaisCorte={animaisCorte} vacinas={vacinas} pastagens={pastagens}/>}
         {menu==="pastagens"      &&<PastagensView pastagens={pastagens} setPastagens={setPastagens} config={config}/>}
         {menu==="financiamentos" &&<FinanciamentosView financiamentos={financiamentos} setFinanciamentos={setFinanciamentos} setDespesas={setDespesas}/>}
         {menu==="lancamentos"    &&<LancamentosView producao={producao} setProducao={setProducao} despesas={despesas} setDespesas={setDespesas} receitas={receitas} setReceitas={setReceitas} funcionarios={funcionarios} setFuncionarios={setFuncionarios} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas}/>}
         {menu==="usuarios"       &&<UsuariosView usuarios={usuarios} setUsuarios={setUsuarios}/>}
         {menu==="configuracoes"  &&<ConfiguracoesView config={config} setConfig={setConfig}/>}
+        </div>
       </div>
     </div>
   );
