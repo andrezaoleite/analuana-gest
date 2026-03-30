@@ -1757,39 +1757,60 @@ export default function App(){
 
   const carregarTudo=async(userId)=>{
     setLoading(true);
-    const {data:perfil}=await supabase.from("perfis").select("*, fazendas(*)").eq("user_id",userId).single();
-    if(!perfil){setLoading(false);return;}
-    setPerfilUser(perfil);
-    setFazenda(perfil.fazendas);
-    const fazId=perfil.fazenda_id;
-    // Carregar perfis da fazenda
-    const {data:todosP}=await supabase.from("perfis").select("*").eq("fazenda_id",fazId);
-    setPerfis(todosP||[]);
-    // Carregar todos os dados
-    const rs=await Promise.all([
-      supabase.from("producao").select("*").eq("fazenda_id",fazId).order("data",{ascending:false}),
-      supabase.from("despesas").select("*").eq("fazenda_id",fazId).order("data",{ascending:false}),
-      supabase.from("receitas").select("*").eq("fazenda_id",fazId).order("data",{ascending:false}),
-      supabase.from("funcionarios").select("*").eq("fazenda_id",fazId),
-      supabase.from("pastagens").select("*").eq("fazenda_id",fazId),
-      supabase.from("financiamentos").select("*").eq("fazenda_id",fazId),
-      supabase.from("animais_leiteiro").select("*").eq("fazenda_id",fazId),
-      supabase.from("animais_corte").select("*").eq("fazenda_id",fazId),
-      supabase.from("vacinas").select("*").eq("fazenda_id",fazId).order("data"),
-      supabase.from("config_fazenda").select("*").eq("fazenda_id",fazId).single(),
-    ]);
-    const [prod,desp,rec,func,past,fin,animL,animC,vac,cfg]=rs.map(r=>r.data);
-    setProducao((prod||[]).map(toCamel));
-    setDespesas((desp||[]).map(toCamel));
-    setReceitas((rec||[]).map(toCamel));
-    setFuncionarios((func||[]).map(toCamel));
-    setPastagens((past||[]).map(toCamel));
-    setFinanciamentos((fin||[]).map(toCamel));
-    setAnimaisLeiteiro((animL||[]).map(toCamel));
-    setAnimaisCorte((animC||[]).map(toCamel));
-    setVacinas((vac||[]).map(toCamel));
-    if(cfg) setConfig(c=>({...c,...toCamel(cfg)}));
-    setLoading(false);
+    try {
+      // 1. Buscar perfil do usuário
+      const {data:perfil,error:pErr}=await supabase
+        .from("perfis").select("*").eq("user_id",userId).single();
+      if(pErr||!perfil){ setLoading(false); return; }
+      setPerfilUser(perfil);
+
+      // 2. Buscar fazenda separado (evita RLS circular no join)
+      const {data:faz,error:fErr}=await supabase
+        .from("fazendas").select("*").eq("id",perfil.fazenda_id).single();
+      if(fErr||!faz){ setLoading(false); return; }
+      setFazenda(faz);
+
+      const fazId=perfil.fazenda_id;
+
+      // 3. Demais perfis da fazenda
+      const {data:todosP}=await supabase
+        .from("perfis").select("*").eq("fazenda_id",fazId);
+      setPerfis(todosP||[]);
+
+      // 4. Todos os dados em paralelo
+      const [
+        {data:prod},{data:desp},{data:rec},{data:func},
+        {data:past},{data:fin},{data:animL},{data:animC},
+        {data:vac},{data:cfg}
+      ] = await Promise.all([
+        supabase.from("producao").select("*").eq("fazenda_id",fazId).order("data",{ascending:false}),
+        supabase.from("despesas").select("*").eq("fazenda_id",fazId).order("data",{ascending:false}),
+        supabase.from("receitas").select("*").eq("fazenda_id",fazId).order("data",{ascending:false}),
+        supabase.from("funcionarios").select("*").eq("fazenda_id",fazId),
+        supabase.from("pastagens").select("*").eq("fazenda_id",fazId),
+        supabase.from("financiamentos").select("*").eq("fazenda_id",fazId),
+        supabase.from("animais_leiteiro").select("*").eq("fazenda_id",fazId),
+        supabase.from("animais_corte").select("*").eq("fazenda_id",fazId),
+        supabase.from("vacinas").select("*").eq("fazenda_id",fazId).order("data"),
+        supabase.from("config_fazenda").select("*").eq("fazenda_id",fazId).maybeSingle(),
+      ]);
+
+      setProducao((prod||[]).map(toCamel));
+      setDespesas((desp||[]).map(toCamel));
+      setReceitas((rec||[]).map(toCamel));
+      setFuncionarios((func||[]).map(toCamel));
+      setPastagens((past||[]).map(toCamel));
+      setFinanciamentos((fin||[]).map(toCamel));
+      setAnimaisLeiteiro((animL||[]).map(toCamel));
+      setAnimaisCorte((animC||[]).map(toCamel));
+      setVacinas((vac||[]).map(toCamel));
+      if(cfg) setConfig(c=>({...c,...toCamel(cfg)}));
+
+    } catch(e) {
+      console.error("Erro ao carregar dados:", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fazendaId=fazenda?.id;
