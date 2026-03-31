@@ -71,9 +71,9 @@ const calcBaseIRRF = (salBruto, inss) => Math.max(0, Number(salBruto) - Number(i
 const calcCustoEmpresa = salBruto => Number(salBruto) * (1 + 0.20 + 0.08 + 0.01 + 0.02 + 0.1111 + 0.0833);
 const temAcesso = (perfil, modulo) => {
   const mapa = {
-    Administrador: ["dashboard","financeiro","folha","producao","manejo","pastagens","gadocorte","lancamentos","financiamentos","usuarios","configuracoes"],
+    Administrador: ["dashboard","financeiro","folha","relatorio","producao","manejo","pastagens","gadocorte","lancamentos","financiamentos","usuarios","configuracoes"],
     Gerente:       ["dashboard","producao","manejo","pastagens","gadocorte","lancamentos"],
-    Financeiro:    ["dashboard","financeiro","folha","lancamentos","financiamentos"],
+    Financeiro:    ["dashboard","financeiro","folha","relatorio","lancamentos","financiamentos"],
     Operacional:   ["producao","manejo","lancamentos"],
   };
   return (mapa[perfil]||[]).includes(modulo);
@@ -1790,7 +1790,7 @@ function ConfiguracoesView({ config, setConfig }) {
 // ── FOLHA SALARIAL ────────────────────────────────────────
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
-function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
+function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd, setDespesas }) {
   const mob = useResponsive();
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
@@ -1857,14 +1857,39 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
 
   const salvarFolha = () => {
     if(!folhaAtiva) return;
-    setConfirm({ msg:`Confirmar geração da folha de ${tipo==="13o"?"13º":"Salário"} — ${MESES[folhaAtiva.mes-1]}/${folhaAtiva.ano}?`, danger:false, onSim: async () => {
+    const tipoLabel = folhaAtiva.tipo==="13o"?"13º Salário":"Salário";
+    const mesLabel  = MESES[(Number(folhaAtiva.mes)||1)-1];
+    setConfirm({ msg:`Confirmar geração da folha de ${tipoLabel} — ${mesLabel}/${folhaAtiva.ano}?`, danger:false, onSim: async () => {
       const folhaId = uid();
-      const folha = { id:folhaId, mes:folhaAtiva.mes, ano:folhaAtiva.ano, tipo:folhaAtiva.tipo, status:"fechado", itens:folhaAtiva.itens };
-      // Salvar no Supabase
+      const itens   = folhaAtiva.itens || [];
+      const totBruto  = itens.reduce((s,i) => s + (i.salarioBruto||0), 0);
+      const totEnc    = itens.reduce((s,i) => s + ((i.custoEmpresa||0) - (i.salarioBruto||0)), 0);
+      const totFgts   = itens.reduce((s,i) => s + (i.fgts||0), 0);
+      const totCusto  = itens.reduce((s,i) => s + (i.custoEmpresa||0), 0);
+
+      // Salvar folha no Supabase
+      const folha = { id:folhaId, mes:folhaAtiva.mes, ano:folhaAtiva.ano, tipo:folhaAtiva.tipo, status:"fechado", itens };
       await dbAdd("folhas", {id:folhaId, mes:folhaAtiva.mes, ano:folhaAtiva.ano, tipo:folhaAtiva.tipo, status:"fechado"}, () => {});
-      for(const item of folhaAtiva.itens) {
+      for(const item of itens) {
         await dbAdd("folha_itens", {...item, folhaId}, () => {});
       }
+
+      // Lançar como despesa — Opção A (1 lançamento por folha)
+      const anoStr = String(folhaAtiva.ano);
+      const mesStr = String(folhaAtiva.mes).padStart(2,"0");
+      const despData = `${anoStr}-${mesStr}-01`;
+      const desp = {
+        id: uid(),
+        data: despData,
+        categoria: "Folha de Pagamento",
+        subcategoria: tipoLabel,
+        valor: totCusto,
+        descricao: `Folha ${tipoLabel} — ${mesLabel}/${folhaAtiva.ano} (${itens.length} func.)`,
+        fornecedor: "Folha Salarial",
+        nf: null,
+      };
+      await dbAdd("despesas", desp, setDespesas);
+
       setFolhas(prev => [folha, ...prev]);
       setFolhaAtiva(null);
       setAba("historico");
@@ -2084,6 +2109,352 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
 }
 
 
+// ── RELATÓRIO FINANCEIRO GERENCIAL ───────────────────────
+function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, config, precos }) {
+  const mob = useResponsive();
+  const anoAtual = new Date().getFullYear();
+  const [periodo, setPeriodo] = useState("trimestral");
+  const [anoRef,  setAnoRef]  = useState(anoAtual);
+  const [trimestreRef, setTrimestreRef] = useState(Math.ceil((new Date().getMonth()+1)/3));
+  const [semestreRef, setSemestreRef]   = useState(new Date().getMonth()<6?1:2);
+
+  // ── Definir meses do período ─────────────────────────────
+  const getMeses = () => {
+    if(periodo==="anual")      return Array.from({length:12},(_,i)=>({mes:i+1,ano:anoRef}));
+    if(periodo==="semestral"){
+      const ini = semestreRef===1?1:7;
+      return Array.from({length:6},(_,i)=>({mes:ini+i,ano:anoRef}));
+    }
+    // trimestral
+    const ini = (trimestreRef-1)*3+1;
+    return Array.from({length:3},(_,i)=>({mes:ini+i,ano:anoRef}));
+  };
+  const mesesPeriodo = getMeses();
+  const labelPeriodo = periodo==="anual"?`Ano ${anoRef}`:
+    periodo==="semestral"?`${semestreRef}º Semestre ${anoRef}`:
+    `${trimestreRef}º Trimestre ${anoRef}`;
+
+  const PC=precos?.precoCacau||18, PL=precos?.precoLeite||2.80,
+        PCO=precos?.precoCoco||2.50, PA=precos?.precoArroba||325;
+
+  // ── Filtrar dados do período ─────────────────────────────
+  const noMes = (dataStr, m, a) => {
+    if(!dataStr) return false;
+    const d = new Date(dataStr+"T12:00:00");
+    return d.getMonth()+1===m && d.getFullYear()===a;
+  };
+
+  const dadosPorMes = mesesPeriodo.map(({mes,ano}) => {
+    const recMes   = receitas.filter(r => noMes(r.data,mes,ano));
+    const despMes  = despesas.filter(d => noMes(d.data,mes,ano));
+    const prodMes  = producao.filter(p => noMes(p.data,mes,ano));
+    const recCacau = prodMes.reduce((s,p)=>s+(p.cacauKg||0)*PC,0);
+    const recLeite = prodMes.reduce((s,p)=>s+(p.leiteL||0)*PL,0);
+    const recCoco  = prodMes.reduce((s,p)=>s+(p.cocoUn||0)*PCO,0);
+    const recGado  = recMes.filter(r=>r.atividade==="Gado Corte").reduce((s,r)=>s+(r.valor||0),0);
+    const recTotal = recCacau+recLeite+recCoco+recGado;
+    const despTotal= despMes.reduce((s,d)=>s+(d.valor||0),0);
+    return {
+      mes, ano,
+      label: MESES[mes-1].slice(0,3)+"/"+String(ano).slice(2),
+      recTotal, recCacau, recLeite, recCoco, recGado,
+      despTotal, lucro: recTotal-despTotal,
+      despPorCat: despMes.reduce((a,d)=>{a[d.categoria]=(a[d.categoria]||0)+(d.valor||0);return a;},{}),
+    };
+  });
+
+  // Totais do período
+  const totRec  = dadosPorMes.reduce((s,m)=>s+m.recTotal,0);
+  const totDesp = dadosPorMes.reduce((s,m)=>s+m.despTotal,0);
+  const totLuc  = totRec-totDesp;
+
+  // Despesas por categoria no período
+  const despPorCatPeriodo = {};
+  dadosPorMes.forEach(m => {
+    Object.entries(m.despPorCat).forEach(([cat,val])=>{
+      despPorCatPeriodo[cat]=(despPorCatPeriodo[cat]||0)+val;
+    });
+  });
+
+  // Receitas por atividade no período
+  const recPizza = [
+    {name:"🍫 Cacau", value:dadosPorMes.reduce((s,m)=>s+m.recCacau,0)},
+    {name:"🥛 Leite",  value:dadosPorMes.reduce((s,m)=>s+m.recLeite,0)},
+    {name:"🥥 Coco",   value:dadosPorMes.reduce((s,m)=>s+m.recCoco,0)},
+    {name:"🐂 Gado",   value:dadosPorMes.reduce((s,m)=>s+m.recGado,0)},
+  ].filter(x=>x.value>0);
+
+  // Evolução da dívida (saldo devedor de cada financiamento)
+  const dividaAtual = financiamentos.filter(f=>f.status==="Ativo").reduce((s,f)=>{
+    const tab = f.sistema==="SAC"?calcTabelaSAC(f):calcTabelaPRICE(f);
+    const prox = tab.find(p=>!(f.pagamentos||[]).includes(p.parcela));
+    return s+(prox?prox.saldo:0);
+  },0);
+
+  // Folhas do período
+  const folhasPeriodo = folhas.filter(f =>
+    mesesPeriodo.some(m => Number(f.mes)===m.mes && Number(f.ano)===m.ano)
+  );
+  const totFolhaBruto = folhasPeriodo.reduce((s,f)=>
+    s+(f.itens||[]).reduce((a,i)=>a+(i.salarioBruto||0),0),0);
+  const totFolhaCusto = folhasPeriodo.reduce((s,f)=>
+    s+(f.itens||[]).reduce((a,i)=>a+(i.custoEmpresa||0),0),0);
+  const totFolhaFgts  = folhasPeriodo.reduce((s,f)=>
+    s+(f.itens||[]).reduce((a,i)=>a+(i.fgts||0),0),0);
+  const totFolhaInss  = folhasPeriodo.reduce((s,f)=>
+    s+(f.itens||[]).reduce((a,i)=>a+(i.inss||0),0),0);
+
+  const CHART_COLORS = ["#2d6a4f","#52b788","#d4a017","#e76f51","#457b9d","#a8dadc","#f4a261","#264653"];
+
+  return (
+    <div>
+      <SectionHeader title="📊 Relatório Financeiro Gerencial" sub={`${config?.nomeFazenda||"Fazenda"} — ${labelPeriodo}`}/>
+
+      {/* Seletor de período */}
+      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"flex-end"}}>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>PERÍODO</label>
+          <div style={{display:"flex",gap:0,borderRadius:8,overflow:"hidden",border:"1px solid #e5e7eb"}}>
+            {[["trimestral","Trimestral"],["semestral","Semestral"],["anual","Anual"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setPeriodo(v)} style={{padding:"8px 14px",border:"none",cursor:"pointer",fontSize:13,fontWeight:periodo===v?700:400,background:periodo===v?"#1b4332":"white",color:periodo===v?"white":"#374151"}}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>ANO</label>
+          <select value={anoRef} onChange={e=>setAnoRef(Number(e.target.value))} style={{padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13}}>
+            {[anoAtual-2,anoAtual-1,anoAtual].map(a=><option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        {periodo==="trimestral"&&(
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>TRIMESTRE</label>
+            <select value={trimestreRef} onChange={e=>setTrimestreRef(Number(e.target.value))} style={{padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13}}>
+              {[1,2,3,4].map(t=><option key={t} value={t}>{t}º Trimestre</option>)}
+            </select>
+          </div>
+        )}
+        {periodo==="semestral"&&(
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>SEMESTRE</label>
+            <select value={semestreRef} onChange={e=>setSemestreRef(Number(e.target.value))} style={{padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13}}>
+              <option value={1}>1º Semestre</option><option value={2}>2º Semestre</option>
+            </select>
+          </div>
+        )}
+        <button onClick={()=>window.print()} style={{padding:"8px 16px",background:"#457b9d",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}}>🖨️ Imprimir</button>
+      </div>
+
+      {/* KPIs principais */}
+      <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:14,marginBottom:20}}>
+        <KpiCard label="Receita Total"    value={fmt(totRec)}  color="#2d6a4f" icon="💰" trend={1}/>
+        <KpiCard label="Despesa Total"    value={fmt(totDesp)} color="#e76f51" icon="📋" trend={-1}/>
+        <KpiCard label={totLuc>=0?"Lucro":"Prejuízo"} value={fmt(Math.abs(totLuc))} color={totLuc>=0?"#d4a017":"#dc2626"} icon={totLuc>=0?"📈":"📉"} trend={totLuc>=0?1:-1}/>
+        <KpiCard label="Dívida Bancária"  value={fmt(dividaAtual)} color="#457b9d" icon="🏦" trend={-1}/>
+      </div>
+
+      {/* Evolução Receita × Despesa × Lucro */}
+      <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"2fr 1fr",gap:14,marginBottom:14}}>
+        <Card>
+          <CardTitle>Evolução Receita × Despesa × Lucro</CardTitle>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={dadosPorMes}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+              <XAxis dataKey="label" tick={{fontSize:11}}/>
+              <YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+              <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+              <Bar dataKey="recTotal"  name="Receita" fill="#2d6a4f" radius={[3,3,0,0]}/>
+              <Bar dataKey="despTotal" name="Despesa" fill="#e76f51" radius={[3,3,0,0]}/>
+              <Bar dataKey="lucro"     name="Lucro"   fill="#d4a017" radius={[3,3,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card>
+          <CardTitle>Receita por Atividade</CardTitle>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={recPizza} cx="50%" cy="48%" outerRadius={70} dataKey="value" label={({percent})=>`${(percent*100).toFixed(0)}%`} labelLine={false}>
+                {recPizza.map((_,i)=><Cell key={i} fill={CHART_COLORS[i]}/>)}
+              </Pie>
+              <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+
+      {/* Despesas por categoria */}
+      <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"2fr 1fr",gap:14,marginBottom:14}}>
+        <Card>
+          <CardTitle>Despesas por Categoria no Período</CardTitle>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart layout="vertical" data={Object.entries(despPorCatPeriodo).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([cat,val])=>({cat:cat.replace(/[🐂🥛]/g,"").trim(),val}))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+              <XAxis type="number" tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+              <YAxis type="category" dataKey="cat" tick={{fontSize:10}} width={110}/>
+              <Tooltip formatter={v=>fmt(v)}/>
+              <Bar dataKey="val" name="Valor" fill="#e76f51" radius={[0,3,3,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card>
+          <CardTitle>Distribuição de Despesas</CardTitle>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={Object.entries(despPorCatPeriodo).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,value])=>({name:name.replace(/[🐂🥛]/g,"").trim(),value}))} cx="50%" cy="48%" outerRadius={70} dataKey="value" label={({percent})=>`${(percent*100).toFixed(0)}%`} labelLine={false}>
+                {Object.entries(despPorCatPeriodo).slice(0,6).map((_,i)=><Cell key={i} fill={CHART_COLORS[i]}/>)}
+              </Pie>
+              <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:10}}/>
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+
+      {/* Receita mês a mês por atividade */}
+      <Card style={{marginBottom:14}}>
+        <CardTitle>Receita por Atividade — Mês a Mês</CardTitle>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={dadosPorMes}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+            <XAxis dataKey="label" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+            <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+            <Bar dataKey="recCacau" name="🍫 Cacau" fill="#d4a017" radius={[3,3,0,0]} stackId="r"/>
+            <Bar dataKey="recLeite" name="🥛 Leite" fill="#2d6a4f" radius={[3,3,0,0]} stackId="r"/>
+            <Bar dataKey="recCoco"  name="🥥 Coco"  fill="#52b788" radius={[3,3,0,0]} stackId="r"/>
+            <Bar dataKey="recGado"  name="🐂 Gado"  fill="#457b9d" radius={[3,3,0,0]} stackId="r"/>
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* Dívidas Bancárias */}
+      {financiamentos.filter(f=>f.status==="Ativo").length>0&&(
+        <Card style={{marginBottom:14}}>
+          <CardTitle>Evolução das Dívidas Bancárias</CardTitle>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":financiamentos.filter(f=>f.status==="Ativo").length===1?"1fr":"1fr 1fr",gap:14}}>
+            {financiamentos.filter(f=>f.status==="Ativo").map((fin,fi)=>{
+              const tab    = fin.sistema==="SAC"?calcTabelaSAC(fin):calcTabelaPRICE(fin);
+              const pagas  = fin.pagamentos||[];
+              const prox   = tab.find(p=>!pagas.includes(p.parcela));
+              const saldoAtual = prox?prox.saldo:0;
+              const pctQuit = ((1-(saldoAtual/fin.valor))*100).toFixed(0);
+              const parcelasRestantes = tab.filter(p=>!pagas.includes(p.parcela)).length;
+              return(
+                <div key={fin.id} style={{padding:14,background:"#f8faf9",borderRadius:8,borderLeft:`3px solid ${CHART_COLORS[fi%8]}`}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:6}}>{fin.banco} — {fin.finalidade}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:11,color:"#6b7280"}}>Valor original</div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#374151"}}>{fmt(fin.valor)}</div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:11,color:"#6b7280"}}>Saldo devedor</div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#e76f51"}}>{fmt(saldoAtual)}</div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:11,color:"#6b7280"}}>Quitado</div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#2d6a4f"}}>{pctQuit}%</div>
+                    </div>
+                  </div>
+                  <div style={{height:8,background:"#e5e7eb",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pctQuit}%`,background:CHART_COLORS[fi%8],borderRadius:4,transition:"width 0.5s"}}/>
+                  </div>
+                  <div style={{marginTop:6,fontSize:11,color:"#9ca3af"}}>{parcelasRestantes} parcelas restantes · {fin.sistema} · {fin.taxa}% a.a.</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{marginTop:12,padding:"10px 14px",background:"#fee2e2",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:13,color:"#b91c1c",fontWeight:600}}>Total dívida bancária atual</span>
+            <span style={{fontSize:16,fontWeight:800,color:"#dc2626"}}>{fmt(dividaAtual)}</span>
+          </div>
+        </Card>
+      )}
+
+      {/* Folha de Pagamento no período */}
+      {folhasPeriodo.length>0&&(
+        <Card style={{marginBottom:14}}>
+          <CardTitle>Folha de Pagamento no Período</CardTitle>
+          <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:12,marginBottom:14}}>
+            {[["Custo Total Empresa",totFolhaCusto,"#e76f51"],["Total Salários Brutos",totFolhaBruto,"#d4a017"],["FGTS Acumulado",totFolhaFgts,"#457b9d"],["INSS Descontado",totFolhaInss,"#9ca3af"]].map(([l,v,c],i)=>(
+              <div key={i} style={{padding:12,background:"#f8faf9",borderRadius:8,borderLeft:`3px solid ${c}`}}>
+                <div style={{fontSize:11,color:"#6b7280"}}>{l}</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#1a1a2e",marginTop:4}}>{fmt(v)}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",minWidth:500,fontSize:12}}>
+              <thead>
+                <tr>
+                  <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,background:"#f8faf9",borderBottom:"1px solid #e5e7eb"}}>Folha</th>
+                  <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,background:"#f8faf9",borderBottom:"1px solid #e5e7eb"}}>Tipo</th>
+                  <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,background:"#f8faf9",borderBottom:"1px solid #e5e7eb"}}>Funcionários</th>
+                  <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,background:"#f8faf9",borderBottom:"1px solid #e5e7eb"}}>Total Bruto</th>
+                  <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,background:"#f8faf9",borderBottom:"1px solid #e5e7eb"}}>Custo Empresa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {folhasPeriodo.map((f,i)=>{
+                  const bruto = (f.itens||[]).reduce((s,it)=>s+(it.salarioBruto||0),0);
+                  const custo = (f.itens||[]).reduce((s,it)=>s+(it.custoEmpresa||0),0);
+                  return(
+                    <tr key={f.id||i} style={{background:i%2?"#fafafa":"white"}}>
+                      <td style={{padding:"8px 12px",fontWeight:600}}>{MESES[(Number(f.mes)||1)-1]}/{f.ano}</td>
+                      <td style={{padding:"8px 12px"}}><span style={{padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:f.tipo==="13o"?"#fef3c7":"#d8f3dc",color:f.tipo==="13o"?"#b45309":"#2d6a4f"}}>{f.tipo==="13o"?"13º Salário":"Normal"}</span></td>
+                      <td style={{padding:"8px 12px",color:"#6b7280"}}>{(f.itens||[]).length} func.</td>
+                      <td style={{padding:"8px 12px",fontWeight:600}}>{fmt(bruto)}</td>
+                      <td style={{padding:"8px 12px",fontWeight:700,color:"#e76f51"}}>{fmt(custo)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Tabela resumo mensal */}
+      <Card>
+        <CardTitle>Resumo Mensal — {labelPeriodo}</CardTitle>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:500,fontSize:12}}>
+            <thead>
+              <tr>
+                {["Mês","Receita","Despesa","Lucro/Prejuízo","Margem"].map((h,i)=>(
+                  <th key={i} style={{padding:"9px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,background:"#f8faf9",borderBottom:"1px solid #e5e7eb"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dadosPorMes.map((m,i)=>(
+                <tr key={i} style={{background:i%2?"#fafafa":"white"}}>
+                  <td style={{padding:"9px 12px",fontWeight:600}}>{MESES[m.mes-1]}/{m.ano}</td>
+                  <td style={{padding:"9px 12px",color:"#2d6a4f",fontWeight:600}}>{fmt(m.recTotal)}</td>
+                  <td style={{padding:"9px 12px",color:"#e76f51"}}>{fmt(m.despTotal)}</td>
+                  <td style={{padding:"9px 12px",fontWeight:700,color:m.lucro>=0?"#1b4332":"#dc2626"}}>{m.lucro>=0?"+":""}{fmt(m.lucro)}</td>
+                  <td style={{padding:"9px 12px",color:m.recTotal>0?(m.lucro/m.recTotal>=0?"#2d6a4f":"#dc2626"):"#9ca3af"}}>
+                    {m.recTotal>0?`${((m.lucro/m.recTotal)*100).toFixed(1)}%`:"—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{background:"#1b4332"}}>
+                <td style={{padding:"10px 12px",color:"white",fontWeight:700}}>TOTAL</td>
+                <td style={{padding:"10px 12px",color:"#95d5b2",fontWeight:700}}>{fmt(totRec)}</td>
+                <td style={{padding:"10px 12px",color:"#fca5a5",fontWeight:700}}>{fmt(totDesp)}</td>
+                <td style={{padding:"10px 12px",color:totLuc>=0?"#95d5b2":"#fca5a5",fontWeight:800}}>{totLuc>=0?"+":""}{fmt(totLuc)}</td>
+                <td style={{padding:"10px 12px",color:totRec>0?(totLuc/totRec>=0?"#95d5b2":"#fca5a5"):"white",fontWeight:700}}>
+                  {totRec>0?`${((totLuc/totRec)*100).toFixed(1)}%`:"—"}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ── APP ROOT ──────────────────────────────────────────────
 export default function App() {
   const mob = useResponsive();
@@ -2192,6 +2563,7 @@ export default function App() {
     { id:"dashboard",      label:"Dashboard",       icon:"🏠" },
     { id:"financeiro",     label:"Financeiro",       icon:"💰" },
     { id:"folha",          label:"Folha Salarial",    icon:"📋" },
+    { id:"relatorio",      label:"Relatório",          icon:"📊" },
     { id:"producao",       label:"Produção",         icon:"📊" },
     { id:"manejo",         label:"Manejo Pecuário",  icon:"🐄" },
     { id:"pastagens",      label:"Pastagens",        icon:"🌿" },
@@ -2241,7 +2613,7 @@ export default function App() {
         <div style={{ flex:1,overflow:"auto",padding:mob?14:22 }}>
           {menu==="dashboard"      && <DashboardView funcionarios={funcionarios} producao={producao} despesas={despesas} receitas={receitas} financiamentos={financiamentos} precos={precos}/>}
           {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas} folhas={folhas}/>}
-          {menu==="folha"          && <FolhaSalarialView funcionarios={funcionarios} folhas={folhas} setFolhas={setFolhas} dbAdd={dbAdd}/>}
+          {menu==="folha"          && <FolhaSalarialView funcionarios={funcionarios} folhas={folhas} setFolhas={setFolhas} dbAdd={dbAdd} setDespesas={setDespesas}/>}
           {menu==="producao"       && <ProducaoView producao={producao}/>}
           {menu==="manejo"         && <ManejoView animaisLeiteiro={animaisLeiteiro} setAnimaisLeiteiro={setAnimaisLeiteiro} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} pastagens={pastagens}/>}
           {menu==="pastagens"      && <PastagensView pastagens={pastagens} setPastagens={setPastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
@@ -2249,6 +2621,7 @@ export default function App() {
           {menu==="lancamentos"    && <LancamentosView producao={producao} setProducao={setProducao} despesas={despesas} setDespesas={setDespesas} receitas={receitas} setReceitas={setReceitas} funcionarios={funcionarios} setFuncionarios={setFuncionarios} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="usuarios"       && <UsuariosView usuarios={usuarios} setUsuarios={setUsuarios}/>}
           {menu==="configuracoes"  && <ConfiguracoesView config={config} setConfig={dbSaveConfig}/>}
+          {menu==="relatorio"      && <RelatorioView producao={producao} despesas={despesas} receitas={receitas} folhas={folhas} financiamentos={financiamentos} config={config} precos={precos}/>}
         </div>
       </div>
     </div>
