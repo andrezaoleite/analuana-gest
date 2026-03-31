@@ -24,12 +24,17 @@ const toSnake = obj => {
 };
 
 // Converte snake_case → camelCase ao carregar do banco
+const CAMPOS_NUMERICOS = new Set([
+  "salario","salarioBruto","inss","salFamilia","fgts","baseIrrf","liquido","custoEmpresa",
+  "valor","cacauKg","leiteL","cocoUn","qtd","custo","area","capacidade","atual",
+  "numFilhos","precoCacau","precoLeite","precoCoco","precoArroba","taxa","carencia","prazo"
+]);
 const toCamel = obj => {
   if(!obj || typeof obj !== "object") return obj;
   const out = {};
   for(const [k,v] of Object.entries(obj)){
     const ck = k.replace(/_([a-z])/g, (_,c) => c.toUpperCase());
-    out[ck] = v;
+    out[ck] = CAMPOS_NUMERICOS.has(ck) && v !== null && v !== undefined ? Number(v) : v;
   }
   return out;
 };
@@ -59,22 +64,16 @@ const fmtN = n => Number(n||0).toLocaleString("pt-BR");
 const hoje = () => new Date().toISOString().slice(0,10);
 const uid  = () => Date.now() + Math.random();
 
-function calcINSSEmpregado(s) {
-  const faixas = [[1518,0.075],[2793.88,0.09],[4190.83,0.12],[8157.41,0.14]];
-  let inss=0, ant=0;
-  for(const [teto,aliq] of faixas){
-    if(s<=ant) break;
-    inss += (Math.min(s,teto)-ant)*aliq;
-    ant=teto; if(s<=teto) break;
-  }
-  return inss;
-}
-const calcSalFamilia = (sal,filhos) => sal<=1906.04 ? 65*filhos : 0;
+const calcINSSEmpregado = s => Number(s) * 0.075;
+const calcSalFamilia = (sal, filhos) => Number(sal) <= 1906.04 ? 67.54 * Number(filhos) : 0;
+const calcFGTS = s => Number(s) * 0.08;
+const calcBaseIRRF = (salBruto, inss) => Math.max(0, Number(salBruto) - Number(inss));
+const calcCustoEmpresa = salBruto => Number(salBruto) * (1 + 0.20 + 0.08 + 0.01 + 0.02 + 0.1111 + 0.0833);
 const temAcesso = (perfil, modulo) => {
   const mapa = {
-    Administrador: ["dashboard","financeiro","producao","manejo","pastagens","gadocorte","lancamentos","financiamentos","usuarios","configuracoes"],
+    Administrador: ["dashboard","financeiro","folha","producao","manejo","pastagens","gadocorte","lancamentos","financiamentos","usuarios","configuracoes"],
     Gerente:       ["dashboard","producao","manejo","pastagens","gadocorte","lancamentos"],
-    Financeiro:    ["dashboard","financeiro","lancamentos","financiamentos"],
+    Financeiro:    ["dashboard","financeiro","folha","lancamentos","financiamentos"],
     Operacional:   ["producao","manejo","lancamentos"],
   };
   return (mapa[perfil]||[]).includes(modulo);
@@ -122,17 +121,18 @@ const USUARIOS_INIT = [
 ];
 
 const FUNCIONARIOS_INIT = [
-  { id:1, nome:"José da Silva",   cargo:"Gerente de Campo",  salario:3800, atividade:"Geral",       numFilhos:2, ativo:true },
-  { id:2, nome:"Maria Oliveira",  cargo:"Ordenhadeira",      salario:1800, atividade:"Leiteiro",    numFilhos:1, ativo:true },
-  { id:3, nome:"Carlos Santos",   cargo:"Trabalhador Rural", salario:1600, atividade:"Geral",       numFilhos:0, ativo:true },
-  { id:4, nome:"Ana Ferreira",    cargo:"Trabalhadora Rural",salario:1600, atividade:"Cacau",       numFilhos:3, ativo:true },
-  { id:5, nome:"Pedro Costa",     cargo:"Motorista",         salario:2200, atividade:"Geral",       numFilhos:1, ativo:true },
-  { id:6, nome:"Luiz Almeida",    cargo:"Tratorista",        salario:2500, atividade:"Geral",       numFilhos:0, ativo:true },
-  { id:7, nome:"Francisca Lima",  cargo:"Colhedora de Cacau",salario:1600, atividade:"Cacau",       numFilhos:2, ativo:true },
-  { id:8, nome:"Antônio Souza",   cargo:"Colhedor de Coco",  salario:1600, atividade:"Coco",        numFilhos:0, ativo:true },
-  { id:9, nome:"Raimundo Neto",   cargo:"Vaqueiro Corte",    salario:1800, atividade:"Gado Corte",  numFilhos:1, ativo:true },
-  { id:10,nome:"Severino Mota",   cargo:"Vaqueiro Leiteiro", salario:1800, atividade:"Leiteiro",    numFilhos:2, ativo:true },
+  { id:"f1",  nome:"José da Silva",   cargo:"Gerente de Campo",   atividade:"Geral",      numFilhos:2, ativo:true, dataAdmissao:"2018-03-01" },
+  { id:"f2",  nome:"Maria Oliveira",  cargo:"Ordenhadeira",       atividade:"Leiteiro",   numFilhos:1, ativo:true, dataAdmissao:"2019-06-15" },
+  { id:"f3",  nome:"Carlos Santos",   cargo:"Trabalhador Rural",  atividade:"Geral",      numFilhos:0, ativo:true, dataAdmissao:"2020-01-10" },
+  { id:"f4",  nome:"Ana Ferreira",    cargo:"Trabalhadora Rural", atividade:"Cacau",      numFilhos:3, ativo:true, dataAdmissao:"2017-08-20" },
+  { id:"f5",  nome:"Pedro Costa",     cargo:"Motorista",          atividade:"Geral",      numFilhos:1, ativo:true, dataAdmissao:"2021-03-05" },
+  { id:"f6",  nome:"Luiz Almeida",    cargo:"Tratorista",         atividade:"Geral",      numFilhos:0, ativo:true, dataAdmissao:"2016-11-12" },
+  { id:"f7",  nome:"Francisca Lima",  cargo:"Colhedora de Cacau", atividade:"Cacau",      numFilhos:2, ativo:true, dataAdmissao:"2019-02-01" },
+  { id:"f8",  nome:"Antônio Souza",   cargo:"Colhedor de Coco",   atividade:"Coco",       numFilhos:0, ativo:true, dataAdmissao:"2020-07-15" },
+  { id:"f9",  nome:"Raimundo Neto",   cargo:"Vaqueiro Corte",     atividade:"Gado Corte", numFilhos:1, ativo:true, dataAdmissao:"2018-05-20" },
+  { id:"f10", nome:"Severino Mota",   cargo:"Vaqueiro Leiteiro",  atividade:"Leiteiro",   numFilhos:2, ativo:true, dataAdmissao:"2017-09-01" },
 ];
+const FOLHAS_INIT = [];
 
 const PRODUCAO_INIT = [
   { id:uid(), data:"2024-10-31", mes:"Out/24", cacauKg:1200, leiteL:8500, cocoUn:3200, responsavel:"José da Silva" },
@@ -518,11 +518,11 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
 function FinanceiroView({ funcionarios, despesas, receitas }) {
   const [tab, setTab] = useState("folha");
 
-  const totalSalBruto = funcionarios.filter(f=>f.ativo).reduce((s,f)=>s+(f.salario||0),0);
-  const totalSalFam   = funcionarios.filter(f=>f.ativo).reduce((s,f)=>s+calcSalFamilia(f.salario,f.numFilhos||0),0);
-  const totalINSSEmp  = funcionarios.filter(f=>f.ativo).reduce((s,f)=>s+calcINSSEmpregado(f.salario),0);
-  const totalEncPatr  = totalSalBruto * (0.20+0.08+0.01+0.02+0.1111+0.0833);
-  const totalFolha    = totalSalBruto + totalEncPatr;
+  const totalSalBruto = 0;
+  const totalSalFam   = 0;
+  const totalINSSEmp  = 0;
+  const totalEncPatr  = 0;
+  const totalFolha    = 0;
 
   const thS = { padding:"9px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,borderBottom:"1px solid #e5e7eb",background:"#f8faf9" };
   const tdS = { padding:"10px 12px",fontSize:12,borderBottom:"1px solid #f3f4f6" };
@@ -1246,7 +1246,7 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
           </div>
           {Number(form.salario||0)<=1906.04 && Number(form.numFilhos||0)>0 && (
             <div style={{ padding:10,background:"#f0faf4",borderRadius:8,fontSize:12,color:"#2d6a4f",marginBottom:12 }}>
-              ✅ Salário família: {fmt(calcSalFamilia(Number(form.salario),Number(form.numFilhos)))} ({form.numFilhos} filho(s) × R$ 65,00)
+              ✅ Salário família: {fmt(calcSalFamilia(0,Number(form.numFilhos)))} ({form.numFilhos} filho(s) × R$ 67,54)
             </div>
           )}
           {Number(form.salario||0)>1906.04 && Number(form.numFilhos||0)>0 && (
@@ -1830,6 +1830,303 @@ function ConfiguracoesView({ config, setConfig }) {
 }
 
 
+// ── FOLHA SALARIAL ────────────────────────────────────────
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
+  const mob = useResponsive();
+  const anoAtual = new Date().getFullYear();
+  const mesAtual = new Date().getMonth() + 1;
+
+  const [aba, setAba]               = useState("historico");
+  const [mes, setMes]               = useState(mesAtual);
+  const [ano, setAno]               = useState(anoAtual);
+  const [tipo, setTipo]             = useState("normal");
+  const [popupAberto, setPopupAberto] = useState(false);
+  const [selecionados, setSelecionados] = useState({}); // {id: {checked, salario}}
+  const [folhaAtiva, setFolhaAtiva] = useState(null);
+  const [confirm, setConfirm]       = useState(null);
+
+  const ativos = funcionarios.filter(f => f.ativo !== false);
+
+  // Abrir popup — inicializar state de seleção
+  const abrirPopup = () => {
+    const init = {};
+    ativos.forEach(f => { init[f.id] = { checked: false, salario: "" }; });
+    setSelecionados(init);
+    setPopupAberto(true);
+  };
+
+  const toggleFunc = id => {
+    setSelecionados(prev => ({...prev, [id]: {...prev[id], checked: !prev[id].checked}}));
+  };
+  const setSalario = (id, val) => {
+    setSelecionados(prev => ({...prev, [id]: {...prev[id], salario: val}}));
+  };
+  const selecionadosList = ativos.filter(f => selecionados[f.id]?.checked);
+
+  // Calcular itens da folha
+  const calcularItens = () => {
+    return selecionadosList.map(f => {
+      const sal   = Number(selecionados[f.id]?.salario) || 0;
+      const inss  = calcINSSEmpregado(sal);
+      const sf    = calcSalFamilia(sal, f.numFilhos || 0);
+      const fgts  = calcFGTS(sal);
+      const birrf = calcBaseIRRF(sal, inss);
+      const liq   = sal - inss + sf;
+      const custo = calcCustoEmpresa(sal);
+      return {
+        id: uid(),
+        funcionarioId: f.id,
+        funcionarioNome: f.nome,
+        salarioBruto: sal,
+        inss, salFamilia: sf, fgts,
+        baseIrrf: birrf,
+        liquido: liq,
+        custoEmpresa: custo,
+      };
+    });
+  };
+
+  const gerarFolha = () => {
+    if(selecionadosList.length === 0) { alert("Selecione ao menos um funcionário."); return; }
+    const semSalario = selecionadosList.filter(f => !Number(selecionados[f.id]?.salario));
+    if(semSalario.length > 0) { alert(`Informe o salário de: ${semSalario.map(f=>f.nome).join(", ")}`); return; }
+    const itens = calcularItens();
+    setFolhaAtiva({ mes, ano, tipo, itens });
+    setPopupAberto(false);
+    setAba("preview");
+  };
+
+  const salvarFolha = () => {
+    if(!folhaAtiva) return;
+    setConfirm({ msg:`Confirmar geração da folha de ${tipo==="13o"?"13º":"Salário"} — ${MESES[folhaAtiva.mes-1]}/${folhaAtiva.ano}?`, danger:false, onSim: async () => {
+      const folhaId = uid();
+      const folha = { id:folhaId, mes:folhaAtiva.mes, ano:folhaAtiva.ano, tipo:folhaAtiva.tipo, status:"fechado", itens:folhaAtiva.itens };
+      // Salvar no Supabase
+      await dbAdd("folhas", {id:folhaId, mes:folhaAtiva.mes, ano:folhaAtiva.ano, tipo:folhaAtiva.tipo, status:"fechado"}, () => {});
+      for(const item of folhaAtiva.itens) {
+        await dbAdd("folha_itens", {...item, folhaId}, () => {});
+      }
+      setFolhas(prev => [folha, ...prev]);
+      setFolhaAtiva(null);
+      setAba("historico");
+      setConfirm(null);
+    }});
+  };
+
+  const thS = { padding:"9px 12px", textAlign:"left", fontSize:11, color:"#6b7280", fontWeight:600, borderBottom:"1px solid #e5e7eb", background:"#f8faf9", whiteSpace:"nowrap" };
+  const tdS = { padding:"9px 12px", fontSize:12, borderBottom:"1px solid #f3f4f6" };
+
+  // Totais do preview
+  const totais = folhaAtiva ? folhaAtiva.itens.reduce((acc, it) => ({
+    salarioBruto:  acc.salarioBruto  + it.salarioBruto,
+    inss:          acc.inss          + it.inss,
+    salFamilia:    acc.salFamilia    + it.salFamilia,
+    fgts:          acc.fgts          + it.fgts,
+    baseIrrf:      acc.baseIrrf      + it.baseIrrf,
+    liquido:       acc.liquido       + it.liquido,
+    custoEmpresa:  acc.custoEmpresa  + it.custoEmpresa,
+  }), {salarioBruto:0,inss:0,salFamilia:0,fgts:0,baseIrrf:0,liquido:0,custoEmpresa:0}) : null;
+
+  return (
+    <div>
+      <SecHeader title="📋 Folha Salarial" sub="Geração mensal de folha de pagamento"/>
+
+      {/* KPIs da última folha */}
+      {folhas.length > 0 && (() => {
+        const ult = folhas[0];
+        const tots = (ult.itens||[]).reduce((a,it)=>({sal:a.sal+(it.salarioBruto||0),liq:a.liq+(it.liquido||0),custo:a.custo+(it.custoEmpresa||0)}),{sal:0,liq:0,custo:0});
+        return (
+          <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:14,marginBottom:18}}>
+            <KpiCard label="Última Folha" value={`${MESES[(ult.mes||1)-1]}/${ult.ano}`} sub={ult.tipo==="13o"?"13º Salário":"Salário Normal"} color="#2d6a4f" icon="📋" trend={0}/>
+            <KpiCard label="Total Bruto"  value={fmt(tots.sal)}   color="#d4a017" icon="💰" trend={0}/>
+            <KpiCard label="Total Líquido" value={fmt(tots.liq)} color="#2d6a4f" icon="✅" trend={0}/>
+            <KpiCard label="Custo Empresa" value={fmt(tots.custo)} color="#e76f51" icon="🏢" trend={0}/>
+          </div>
+        );
+      })()}
+
+      <TabBar tabs={[{id:"historico",label:"📂 Histórico"},{id:"nova",label:"➕ Nova Folha"},{id:"preview",label:"👁 Preview",hidden:!folhaAtiva}].filter(t=>!t.hidden)} active={aba} onChange={setAba}/>
+
+      {/* ── NOVA FOLHA ── */}
+      {aba==="nova" && (
+        <Card>
+          <CardTitle>Configurar nova folha</CardTitle>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,1fr)",gap:16,marginBottom:20}}>
+            <div>
+              <label style={{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:5}}>Mês *</label>
+              <select value={mes} onChange={e=>setMes(Number(e.target.value))} style={{width:"100%",padding:"9px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:14}}>
+                {MESES.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:5}}>Ano *</label>
+              <select value={ano} onChange={e=>setAno(Number(e.target.value))} style={{width:"100%",padding:"9px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:14}}>
+                {[anoAtual-1,anoAtual,anoAtual+1].map(a=><option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:5}}>Tipo *</label>
+              <select value={tipo} onChange={e=>setTipo(e.target.value)} style={{width:"100%",padding:"9px 12px",border:"1px solid #d1d5db",borderRadius:8,fontSize:14}}>
+                <option value="normal">Salário do Mês</option>
+                <option value="13o">13º Salário</option>
+              </select>
+            </div>
+          </div>
+          <div style={{padding:"12px 16px",background:"#f0faf4",borderRadius:8,marginBottom:20,fontSize:13,color:"#1b4332"}}>
+            Folha de <strong>{tipo==="13o"?"13º Salário":"Salário"}</strong> — <strong>{MESES[mes-1]}/{ano}</strong> · {ativos.length} funcionários ativos disponíveis
+          </div>
+          <button onClick={abrirPopup} style={{padding:"11px 24px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:14}}>
+            👥 Selecionar Funcionários e Informar Salários
+          </button>
+        </Card>
+      )}
+
+      {/* ── HISTÓRICO ── */}
+      {aba==="historico" && (
+        folhas.length === 0
+          ? <Card><div style={{textAlign:"center",padding:30,color:"#9ca3af"}}>
+              <div style={{fontSize:32,marginBottom:8}}>📋</div>
+              <div style={{fontSize:14}}>Nenhuma folha gerada ainda. Vá em <strong>Nova Folha</strong> para começar.</div>
+            </div></Card>
+          : <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {folhas.map((f,i) => {
+                const tots = (f.itens||[]).reduce((a,it)=>({sal:a.sal+(it.salarioBruto||0),liq:a.liq+(it.liquido||0),custo:a.custo+(it.custoEmpresa||0)}),{sal:0,liq:0,custo:0});
+                return (
+                  <Card key={f.id||i}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+                      <div>
+                        <div style={{fontSize:15,fontWeight:700,color:"#1a1a2e"}}>
+                          {tipo==="13o"?"🎄 13º Salário":"💰 Salário"} — {MESES[(f.mes||1)-1]}/{f.ano}
+                          <span style={{marginLeft:10,padding:"2px 10px",borderRadius:8,fontSize:11,fontWeight:600,background:f.tipo==="13o"?"#fef3c7":"#d8f3dc",color:f.tipo==="13o"?"#b45309":"#2d6a4f"}}>{f.tipo==="13o"?"13º":"Normal"}</span>
+                        </div>
+                        <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{(f.itens||[]).length} funcionários · Bruto: {fmt(tots.sal)} · Líquido: {fmt(tots.liq)}</div>
+                      </div>
+                      <button onClick={()=>{setFolhaAtiva(f);setAba("preview");}} style={{padding:"7px 14px",background:"none",border:"1px solid #b7e4c7",borderRadius:6,cursor:"pointer",color:"#2d6a4f",fontSize:12,fontWeight:600}}>
+                        👁 Ver Folha
+                      </button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+      )}
+
+      {/* ── PREVIEW DA FOLHA ── */}
+      {aba==="preview" && folhaAtiva && (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:700,color:"#1b4332"}}>
+                {folhaAtiva.tipo==="13o"?"🎄 13º Salário":"💰 Folha Salarial"} — {MESES[(folhaAtiva.mes||1)-1]}/{folhaAtiva.ano}
+              </div>
+              <div style={{fontSize:12,color:"#6b7280"}}>{(folhaAtiva.itens||[]).length} funcionários</div>
+            </div>
+            {!folhaAtiva.status && (
+              <button onClick={salvarFolha} style={{padding:"9px 20px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13}}>
+                💾 Salvar Folha
+              </button>
+            )}
+          </div>
+
+          <Card style={{padding:0,overflow:"hidden"}}>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",minWidth:700}}>
+                <thead>
+                  <tr>{["Funcionário","Sal. Bruto","INSS (7,5%)","Sal. Família","FGTS (8%)","Base IRRF","Líquido","Custo Empresa"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {(folhaAtiva.itens||[]).map((it,i)=>(
+                    <tr key={it.id||i} style={{background:i%2?"#fafafa":"white"}}>
+                      <td style={{...tdS,fontWeight:600,color:"#1a1a2e"}}>{it.funcionarioNome}</td>
+                      <td style={tdS}>{fmt(it.salarioBruto)}</td>
+                      <td style={{...tdS,color:"#e76f51"}}>{fmt(it.inss)}</td>
+                      <td style={{...tdS,color:"#2d6a4f",fontWeight:it.salFamilia>0?600:400}}>{it.salFamilia>0?fmt(it.salFamilia):"—"}</td>
+                      <td style={{...tdS,color:"#457b9d"}}>{fmt(it.fgts)}</td>
+                      <td style={tdS}>{fmt(it.baseIrrf)}</td>
+                      <td style={{...tdS,fontWeight:700,color:"#1b4332"}}>{fmt(it.liquido)}</td>
+                      <td style={{...tdS,fontWeight:600,color:"#374151"}}>{fmt(it.custoEmpresa)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {totais && (
+                  <tfoot>
+                    <tr style={{background:"#1b4332"}}>
+                      <td style={{padding:"10px 12px",color:"white",fontWeight:700}}>TOTAIS</td>
+                      <td style={{padding:"10px 12px",color:"#95d5b2",fontWeight:700}}>{fmt(totais.salarioBruto)}</td>
+                      <td style={{padding:"10px 12px",color:"#fca5a5",fontWeight:700}}>{fmt(totais.inss)}</td>
+                      <td style={{padding:"10px 12px",color:"#95d5b2",fontWeight:700}}>{fmt(totais.salFamilia)}</td>
+                      <td style={{padding:"10px 12px",color:"#a8dadc",fontWeight:700}}>{fmt(totais.fgts)}</td>
+                      <td style={{padding:"10px 12px",color:"#e5e7eb",fontWeight:700}}>{fmt(totais.baseIrrf)}</td>
+                      <td style={{padding:"10px 12px",color:"white",fontWeight:800}}>{fmt(totais.liquido)}</td>
+                      <td style={{padding:"10px 12px",color:"#ffd166",fontWeight:700}}>{fmt(totais.custoEmpresa)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </Card>
+
+          <div style={{marginTop:12,padding:"12px 16px",background:"#fffbeb",borderRadius:8,fontSize:12,color:"#92400e"}}>
+            💡 <strong>Referências:</strong> INSS: 7,5% sobre o salário bruto · Salário Família: R$ 67,54/filho (sal. ≤ R$ 1.906,04) · FGTS: 8% sobre salário bruto · Custo Empresa inclui INSS patronal (20%), FGTS (8%), RAT (1%), SENAR (2%), provisões férias (11,1%) e 13º (8,3%)
+          </div>
+        </div>
+      )}
+
+      {/* ── POPUP SELEÇÃO DE FUNCIONÁRIOS ── */}
+      {popupAberto && (
+        <Modal title={`👥 Selecionar Funcionários — ${MESES[mes-1]}/${ano} (${tipo==="13o"?"13º":"Normal"})`} onClose={()=>setPopupAberto(false)} largura={680}>
+          <div style={{fontSize:12,color:"#6b7280",marginBottom:14,padding:"8px 12px",background:"#f0faf4",borderRadius:6}}>
+            Marque os funcionários e informe o salário bruto de cada um para este mês.
+          </div>
+          <div style={{maxHeight:400,overflowY:"auto"}}>
+            {ativos.map((f,i) => (
+              <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #f3f4f6"}}>
+                <input type="checkbox" checked={!!selecionados[f.id]?.checked} onChange={()=>toggleFunc(f.id)}
+                  style={{width:16,height:16,cursor:"pointer",accentColor:"#1b4332"}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>{f.nome}</div>
+                  <div style={{fontSize:11,color:"#6b7280"}}>{f.cargo} · {f.numFilhos||0} dependente(s)</div>
+                </div>
+                {selecionados[f.id]?.checked && (
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:12,color:"#374151",whiteSpace:"nowrap"}}>Salário bruto:</span>
+                    <input
+                      type="number"
+                      value={selecionados[f.id]?.salario||""}
+                      onChange={e=>setSalario(f.id,e.target.value)}
+                      placeholder="R$ 0,00"
+                      style={{width:110,padding:"6px 10px",border:"1px solid #d1d5db",borderRadius:6,fontSize:13}}
+                    />
+                  </div>
+                )}
+                {selecionados[f.id]?.checked && selecionados[f.id]?.salario && (
+                  <div style={{fontSize:11,color:"#2d6a4f",minWidth:80,textAlign:"right"}}>
+                    Líq: {fmt(Number(selecionados[f.id].salario)*0.925 + calcSalFamilia(Number(selecionados[f.id].salario),f.numFilhos||0))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:13,color:"#6b7280"}}>{selecionadosList.length} funcionário(s) selecionado(s)</div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setPopupAberto(false)} style={{padding:"9px 16px",background:"#f3f4f6",color:"#374151",border:"1px solid #e5e7eb",borderRadius:8,cursor:"pointer",fontSize:13}}>Cancelar</button>
+              <button onClick={gerarFolha} style={{padding:"9px 20px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13}}>
+                📋 Gerar Folha
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirm && <Confirm msg={confirm.msg} danger={confirm.danger} onSim={confirm.onSim} onNao={()=>setConfirm(null)}/>}
+    </div>
+  );
+}
+
+
 // ── APP ROOT ──────────────────────────────────────────────
 export default function App() {
   const mob = useResponsive();
@@ -1848,12 +2145,13 @@ export default function App() {
   const [vacinas,       setVacinas]       = useState(VACINAS_INIT);
   const [pastagens,     setPastagens]     = useState(PASTAGENS_INIT);
   const [financiamentos,setFinanciamentos]= useState(FINANCIAMENTOS_INIT);
+  const [folhas,        setFolhas]         = useState(FOLHAS_INIT);
 
   // ── Carregar dados do Supabase ─────────────────────────
   useEffect(() => {
     const carregar = async () => {
       try {
-        const [cfg, func, prod, desp, rec, animL, animC, vac, past, fin] = await Promise.all([
+        const [cfg, func, prod, desp, rec, animL, animC, vac, past, fin, fol] = await Promise.all([
           supabase.from("config_fazenda").select("*").eq("id","principal").single(),
           supabase.from("funcionarios").select("*").order("nome"),
           supabase.from("producao").select("*").order("data", {ascending:false}),
@@ -1864,6 +2162,7 @@ export default function App() {
           supabase.from("vacinas").select("*").order("data"),
           supabase.from("pastagens").select("*").order("nome"),
           supabase.from("financiamentos").select("*").order("criado_em"),
+          supabase.from("folhas").select("*, folha_itens(*)").order("ano", {ascending:false}).order("mes", {ascending:false}),
         ]);
         if(cfg.data)    setConfig(c => ({...c, ...toCamel(cfg.data)}));
         if(func.data?.length)  setFuncionarios(func.data.map(toCamel));
@@ -1875,6 +2174,7 @@ export default function App() {
         if(vac.data?.length)   setVacinas(vac.data.map(toCamel));
         if(past.data?.length)  setPastagens(past.data.map(toCamel));
         if(fin.data?.length)   setFinanciamentos(fin.data.map(toCamel));
+        if(fol.data?.length)   setFolhas(fol.data.map(f=>({...toCamel(f), itens:(f.folha_itens||[]).map(toCamel)})));
       } catch(e) {
         console.error("Erro ao carregar dados:", e);
       } finally {
@@ -1934,6 +2234,7 @@ export default function App() {
   const MENU_ITEMS = [
     { id:"dashboard",      label:"Dashboard",       icon:"🏠" },
     { id:"financeiro",     label:"Financeiro",       icon:"💰" },
+    { id:"folha",          label:"Folha Salarial",    icon:"📋" },
     { id:"producao",       label:"Produção",         icon:"📊" },
     { id:"manejo",         label:"Manejo Pecuário",  icon:"🐄" },
     { id:"pastagens",      label:"Pastagens",        icon:"🌿" },
@@ -1982,7 +2283,8 @@ export default function App() {
         )}
         <div style={{ flex:1,overflow:"auto",padding:mob?14:22 }}>
           {menu==="dashboard"      && <DashboardView funcionarios={funcionarios} producao={producao} despesas={despesas} receitas={receitas} financiamentos={financiamentos} precos={precos}/>}
-          {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas}/>}
+          {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas} folhas={folhas}/>}
+          {menu==="folha"          && <FolhaSalarialView funcionarios={funcionarios} folhas={folhas} setFolhas={setFolhas} dbAdd={dbAdd}/>}
           {menu==="producao"       && <ProducaoView producao={producao}/>}
           {menu==="manejo"         && <ManejoView animaisLeiteiro={animaisLeiteiro} setAnimaisLeiteiro={setAnimaisLeiteiro} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} pastagens={pastagens}/>}
           {menu==="pastagens"      && <PastagensView pastagens={pastagens} setPastagens={setPastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
