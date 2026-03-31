@@ -165,96 +165,30 @@ const USUARIOS_INIT = [
   { id:3, usuario:"contador", senha:"contabil@1",  nome:"Contador",        perfil:"Financeiro",    ativo:true },
 ];
 
-const FUNCIONARIOS_INIT = [
-  { id:"f1",  nome:"José da Silva",   cargo:"Gerente de Campo",   atividade:"Geral",      numFilhos:2, ativo:true, dataAdmissao:"2018-03-01" },
-  { id:"f2",  nome:"Maria Oliveira",  cargo:"Ordenhadeira",       atividade:"Leiteiro",   numFilhos:1, ativo:true, dataAdmissao:"2019-06-15" },
-  { id:"f3",  nome:"Carlos Santos",   cargo:"Trabalhador Rural",  atividade:"Geral",      numFilhos:0, ativo:true, dataAdmissao:"2020-01-10" },
-  { id:"f4",  nome:"Ana Ferreira",    cargo:"Trabalhadora Rural", atividade:"Cacau",      numFilhos:3, ativo:true, dataAdmissao:"2017-08-20" },
-  { id:"f5",  nome:"Pedro Costa",     cargo:"Motorista",          atividade:"Geral",      numFilhos:1, ativo:true, dataAdmissao:"2021-03-05" },
-  { id:"f6",  nome:"Luiz Almeida",    cargo:"Tratorista",         atividade:"Geral",      numFilhos:0, ativo:true, dataAdmissao:"2016-11-12" },
-  { id:"f7",  nome:"Francisca Lima",  cargo:"Colhedora de Cacau", atividade:"Cacau",      numFilhos:2, ativo:true, dataAdmissao:"2019-02-01" },
-  { id:"f8",  nome:"Antônio Souza",   cargo:"Colhedor de Coco",   atividade:"Coco",       numFilhos:0, ativo:true, dataAdmissao:"2020-07-15" },
-  { id:"f9",  nome:"Raimundo Neto",   cargo:"Vaqueiro Corte",     atividade:"Gado Corte", numFilhos:1, ativo:true, dataAdmissao:"2018-05-20" },
-  { id:"f10", nome:"Severino Mota",   cargo:"Vaqueiro Leiteiro",  atividade:"Leiteiro",   numFilhos:2, ativo:true, dataAdmissao:"2017-09-01" },
-];
+const FUNCIONARIOS_INIT = []; // dados carregados do Supabase
 const FOLHAS_INIT = [];
 
-const PRODUCAO_INIT = [
-  { id:uid(), data:"2024-10-31", mes:"Out/24", cacauKg:1200, leiteL:8500, cocoUn:3200, responsavel:"José da Silva" },
-  { id:uid(), data:"2024-11-30", mes:"Nov/24", cacauKg: 980, leiteL:8200, cocoUn:3000, responsavel:"José da Silva" },
-  { id:uid(), data:"2024-12-31", mes:"Dez/24", cacauKg:1450, leiteL:7900, cocoUn:2800, responsavel:"José da Silva" },
-  { id:uid(), data:"2025-01-31", mes:"Jan/25", cacauKg:1100, leiteL:8800, cocoUn:3500, responsavel:"José da Silva" },
-  { id:uid(), data:"2025-02-28", mes:"Fev/25", cacauKg: 890, leiteL:8600, cocoUn:3100, responsavel:"José da Silva" },
-  { id:uid(), data:"2025-03-31", mes:"Mar/25", cacauKg:1320, leiteL:9100, cocoUn:3800, responsavel:"José da Silva" },
-];
+const PRODUCAO_INIT = []; // dados carregados do Supabase
 
-const DESPESAS_INIT = [
-  { id:uid(), data:"2025-03-05", categoria:"🐂 Gado de Corte", subcategoria:"Ração/Suplemento",   valor:9400, descricao:"Ração confinamento Março",  fornecedor:"AgroNutrição Ltda", nf:null },
-  { id:uid(), data:"2025-03-08", categoria:"🐂 Gado de Corte", subcategoria:"Medicamentos/Vet.",  valor:1200, descricao:"Ivermectina + antibiótico",  fornecedor:"Vetmed Distribuidora",nf:null },
-  { id:uid(), data:"2025-03-10", categoria:"🥛 Gado Leiteiro", subcategoria:"Ração Vacas",         valor:3800, descricao:"Ração lactação Março",       fornecedor:"AgroNutrição Ltda", nf:null },
-  { id:uid(), data:"2025-03-12", categoria:"Insumos Agrícolas",subcategoria:"Fertilizantes",        valor:4500, descricao:"NPK cacau e coco",           fornecedor:"Fertisul BA",       nf:null },
-  { id:uid(), data:"2025-03-15", categoria:"Combustível",      subcategoria:"Diesel",               valor:2100, descricao:"Diesel tratores/veículos",  fornecedor:"Posto BR",          nf:null },
-  { id:uid(), data:"2025-03-20", categoria:"Manutenção",       subcategoria:"Equipamentos",         valor:1800, descricao:"Revisão ordenhadeira",       fornecedor:"TecnoAgro",         nf:null },
-  { id:uid(), data:"2025-03-25", categoria:"Energia",          subcategoria:"Energia Elétrica",     valor: 900, descricao:"Conta COELBA Março",        fornecedor:"COELBA",            nf:null },
-  { id:uid(), data:"2025-03-28", categoria:"Tributos",         subcategoria:"Funrural",             valor: 705, descricao:"Funrural Março/25",         fornecedor:"Receita Federal",   nf:null },
-];
+const DESPESAS_INIT = []; // dados carregados do Supabase
 
-const RECEITAS_INIT = [
-  { id:uid(), data:"2025-03-05", atividade:"Cacau",      valor:23760, qtd:"1320 kg", unitario:"R$18/kg",    comprador:"Cacau Bahia Ltda",   obs:"" },
-  { id:uid(), data:"2025-03-10", atividade:"Leite",      valor:25480, qtd:"9100 L",  unitario:"R$2,80/L",   comprador:"Laticínios Sul BA",  obs:"" },
-  { id:uid(), data:"2025-03-15", atividade:"Coco",       valor: 9500, qtd:"3800 un", unitario:"R$2,50/un",  comprador:"Mercado Melo",       obs:"" },
-  { id:uid(), data:"2025-03-20", atividade:"Gado Corte", valor:141050,qtd:"7 cab/434@",unitario:"R$325/@", comprador:"Frigorífico Bahia",  obs:"7 cabeças, 434 arrobas" },
-];
+const RECEITAS_INIT = []; // dados carregados do Supabase
 
-const ANIMAIS_LEITEIRO_INIT = [
-  { id:1, brinco:"BL-001", lote:"Lote A – Matrizes",  qtd:28, status:"Saudável",  proxVacina:"Jul/25", pasto:"Pasto Norte" },
-  { id:2, brinco:"BL-002", lote:"Lote B – Recria",    qtd:12, status:"Saudável",  proxVacina:"Ago/25", pasto:"Pasto Sul"   },
-  { id:3, brinco:"BL-003", lote:"Lote C – Bezerros",  qtd: 8, status:"⚠ Atenção", proxVacina:"Abr/25", pasto:"Piquete 1"   },
-];
+const ANIMAIS_LEITEIRO_INIT = []; // dados carregados do Supabase
 
-const ANIMAIS_CORTE_INIT = [
-  { id:1,  brinco:"BC-001", categoria:"Boi Gordo",    pesoPrev:480, pesoAtual:512, dtEntrada:"Jan/25", previsaoAbate:"Mai/25", pasto:"Confinamento A", status:"Pronto p/ Abate", custoAquisicao:4200 },
-  { id:2,  brinco:"BC-002", categoria:"Boi Gordo",    pesoPrev:460, pesoAtual:498, dtEntrada:"Jan/25", previsaoAbate:"Mai/25", pasto:"Confinamento A", status:"Pronto p/ Abate", custoAquisicao:4000 },
-  { id:3,  brinco:"BC-003", categoria:"Garrote",      pesoPrev:320, pesoAtual:345, dtEntrada:"Fev/25", previsaoAbate:"Ago/25", pasto:"Pasto Leste",    status:"Em engorda",      custoAquisicao:2800 },
-  { id:4,  brinco:"BC-004", categoria:"Garrote",      pesoPrev:310, pesoAtual:338, dtEntrada:"Fev/25", previsaoAbate:"Ago/25", pasto:"Pasto Leste",    status:"Em engorda",      custoAquisicao:2700 },
-  { id:5,  brinco:"BC-005", categoria:"Novilha",      pesoPrev:290, pesoAtual:315, dtEntrada:"Mar/25", previsaoAbate:"Set/25", pasto:"Pasto Sul",      status:"Em engorda",      custoAquisicao:2500 },
-  { id:6,  brinco:"BC-006", categoria:"Novilha",      pesoPrev:280, pesoAtual:302, dtEntrada:"Mar/25", previsaoAbate:"Set/25", pasto:"Pasto Sul",      status:"Em engorda",      custoAquisicao:2400 },
-  { id:7,  brinco:"BC-007", categoria:"Boi Gordo",    pesoPrev:490, pesoAtual:505, dtEntrada:"Dez/24", previsaoAbate:"Abr/25", pasto:"Confinamento B", status:"Pronto p/ Abate", custoAquisicao:4300 },
-  { id:8,  brinco:"BC-008", categoria:"Bezerro Rec.", pesoPrev:180, pesoAtual:195, dtEntrada:"Mar/25", previsaoAbate:"Jan/26", pasto:"Piquete 2",      status:"Recria",          custoAquisicao:1200 },
-  { id:9,  brinco:"BC-009", categoria:"Bezerro Rec.", pesoPrev:175, pesoAtual:188, dtEntrada:"Mar/25", previsaoAbate:"Jan/26", pasto:"Piquete 2",      status:"Recria",          custoAquisicao:1150 },
-  { id:10, brinco:"BC-010", categoria:"Garrote",      pesoPrev:330, pesoAtual:352, dtEntrada:"Fev/25", previsaoAbate:"Ago/25", pasto:"Pasto Leste",    status:"Em engorda",      custoAquisicao:2900 },
-];
+const ANIMAIS_CORTE_INIT = []; // dados carregados do Supabase
 
-const VACINAS_INIT = [
-  { id:uid(), data:"2025-04-10", rebanho:"Corte",    lote:"Confinamento A+B", vacina:"Febre Aftosa",          qtd:9,  custo:270,  status:"Pendente"  },
-  { id:uid(), data:"2025-04-15", rebanho:"Leiteiro", lote:"Lote C – Bezerros",vacina:"Brucelose + Carbúnculo", qtd:8,  custo:320,  status:"Pendente"  },
-  { id:uid(), data:"2025-05-01", rebanho:"Leiteiro", lote:"Lote A – Matrizes",vacina:"Febre Aftosa",           qtd:28, custo:840,  status:"Pendente"  },
-  { id:uid(), data:"2025-03-01", rebanho:"Corte",    lote:"Todos",            vacina:"Vermifugação",           qtd:10, custo:180,  status:"Realizado" },
-  { id:uid(), data:"2025-02-10", rebanho:"Leiteiro", lote:"Lote A – Matrizes",vacina:"IBR/BVD",                qtd:28, custo:980,  status:"Realizado" },
-];
+const VACINAS_INIT = []; // dados carregados do Supabase
 
 const CAPINS = ["Brachiaria brizantha","Brachiaria decumbens","Panicum maximum (Mombaça)","Panicum maximum (Tanzania)","Cynodon (Tifton 85)","Andropogon gayanus","Pennisetum purpureum","Piatã","Xaraés","Marandu","Nativo/Misto"];
 const STATUS_PASTO = ["Em uso","Descanso","Em reforma","Vedado","Reserva"];
 const TIPO_PASTO   = ["Leiteiro","Corte","Misto","Reserva"];
 const TIPO_FINANC  = ["Custeio Agrícola","Custeio Pecuário Leite","Custeio Pecuário Corte","Investimento","PRONAF","FCO","Outros"];
 const SISTEMA_AMORT= ["SAC","SAC Semestral","PRICE","Parcela Única"];
-const PASTAGENS_INIT = [
-  { id:1, nome:"Pasto Norte",    area:45, capacidade:30, atual:28, tipo:"Leiteiro", status:"Em uso",   capim:"Brachiaria brizantha", dtPlantio:"2018-03", obs:"Principal pasto das matrizes" },
-  { id:2, nome:"Pasto Sul",      area:32, capacidade:22, atual:18, tipo:"Misto",    status:"Em uso",   capim:"Panicum maximum (Mombaça)", dtPlantio:"2019-06", obs:"" },
-  { id:3, nome:"Pasto Leste",    area:38, capacidade:22, atual:13, tipo:"Corte",    status:"Em uso",   capim:"Brachiaria brizantha", dtPlantio:"2017-09", obs:"Engorda garrotes" },
-  { id:4, nome:"Piquete 1",      area: 8, capacidade:10, atual: 8, tipo:"Leiteiro", status:"Em uso",   capim:"Cynodon (Tifton 85)",  dtPlantio:"2020-04", obs:"Bezerros leiteiros" },
-  { id:5, nome:"Piquete 2",      area: 6, capacidade: 8, atual: 2, tipo:"Corte",    status:"Descanso", capim:"Cynodon (Tifton 85)",  dtPlantio:"2020-04", obs:"Em descanso 30 dias" },
-  { id:6, nome:"Confinamento A", area: 4, capacidade:10, atual: 5, tipo:"Corte",    status:"Em uso",   capim:"Nativo/Misto",         dtPlantio:"",        obs:"Bois gordos" },
-  { id:7, nome:"Confinamento B", area: 4, capacidade:10, atual: 5, tipo:"Corte",    status:"Em uso",   capim:"Nativo/Misto",         dtPlantio:"",        obs:"" },
-  { id:8, nome:"Reserva Mata",   area:20, capacidade: 0, atual: 0, tipo:"Reserva",  status:"Vedado",   capim:"Nativo/Misto",         dtPlantio:"",        obs:"Reserva legal" },
-];
+const PASTAGENS_INIT = []; // dados carregados do Supabase
 
 
-const FINANCIAMENTOS_INIT = [
-  { id:"fin1", banco:"Banco do Brasil", tipo:"Custeio",     finalidade:"Custeio Safra Cacau 24/25",       valor:80000,  taxa:7.5, carencia:0,  prazo:12, sistema:"SAC",   dtContratacao:"2025-01-15", garantias:"Penhor safra",   status:"Ativo", pagamentos:[] },
-  { id:"fin2", banco:"BNB – Nordeste",  tipo:"Investimento", finalidade:"Reforma Pastagens e Benfeitorias", valor:150000, taxa:6.0, carencia:12, prazo:60, sistema:"PRICE", dtContratacao:"2024-06-01", garantias:"Hipoteca imóvel", status:"Ativo", pagamentos:[] },
-  { id:"fin3", banco:"Banco do Brasil", tipo:"PRONAF",       finalidade:"PRONAF Leite – Ordenhadeira",     valor:40000,  taxa:5.5, carencia:3,  prazo:24, sistema:"SAC",   dtContratacao:"2024-09-01", garantias:"Aval + penhor",  status:"Ativo", pagamentos:[] },
-];
+const FINANCIAMENTOS_INIT = []; // dados carregados do Supabase
 const VENDAS_GADO_HIST = [
   { mes:"Out", cabecas:4, arrobas:240, valorArroba:310, total:74400  },
   { mes:"Nov", cabecas:3, arrobas:178, valorArroba:315, total:56070  },
