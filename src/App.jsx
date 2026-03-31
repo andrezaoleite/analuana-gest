@@ -82,18 +82,50 @@ const temAcesso = (perfil, modulo) => {
 
 const fmtData = dataStr => { if(!dataStr) return "—"; const [y,m,d] = dataStr.split("-"); return d?`${d}/${m}/${y}`:dataStr; };
 const addMeses = (dataStr, n) => { if(!dataStr) return "—"; const d=new Date(dataStr+"T12:00:00"); d.setMonth(d.getMonth()+n); return d.toISOString().slice(0,7); };
-function calcTabelaSAC(f){
-  const tm=(f.taxa||0)/100/12,pa=Math.max(1,(f.prazo||1)-(f.carencia||0)),am=(f.valor||0)/pa;
-  const tab=[];let s=f.valor||0;
-  for(let i=1;i<=(f.prazo||1);i++){
-    const j=s*tm,ic=i<=(f.carencia||0),a=ic?0:am,p=ic?j:a+j;
-    tab.push({parcela:i,tipo:ic?"Carência":"Normal",saldo:Math.max(0,s),amortizacao:a,juros:j,prestacao:p,vencimento:addMeses(f.dtContratacao,i),status:"Pendente"});
-    s=Math.max(0,s-a);
+// Adiciona N períodos (meses, semestres ou anos) a uma data
+function addPeriodos(dtBase, n, periodicidade) {
+  if(!dtBase) return "—";
+  const meses = periodicidade==="anual"?12 : periodicidade==="semestral"?6 : 1;
+  return addMeses(dtBase, n * meses);
+}
+
+// Custeio: parcela única no vencimento alinhado à safra
+function calcTabelaCusteio(f) {
+  const taxa   = (f.taxa||0)/100;
+  const meses  = Number(f.mesesCusteio)||12;
+  const juros  = (f.valor||0) * taxa * (meses/12);
+  const venc   = f.dtVencimento || addMeses(f.dtContratacao, meses);
+  return [{
+    parcela:1, tipo:"Parcela Única",
+    saldo:f.valor||0, amortizacao:f.valor||0,
+    juros, prestacao:(f.valor||0)+juros,
+    vencimento:venc, status:"Pendente"
+  }];
+}
+
+// SAC com periodicidade configurável (anual, semestral, mensal)
+function calcTabelaSAC(f) {
+  const per   = f.periodicidade||"mensal";
+  const mPer  = per==="anual"?12 : per==="semestral"?6 : 1;
+  const tPer  = (f.taxa||0)/100 * (mPer/12);
+  const carPer= Math.floor((Number(f.carencia)||0) / mPer);
+  const nAmort= Math.max(1, (Number(f.prazo)||1) - carPer);
+  const am    = (f.valor||0) / nAmort;
+  const tab=[]; let s=f.valor||0;
+  const total = carPer + nAmort;
+  for(let i=1; i<=total; i++) {
+    const j=s*tPer, ic=i<=carPer, a=ic?0:am, p=ic?j:a+j;
+    tab.push({parcela:i, tipo:ic?"Carência":"Normal",
+      saldo:Math.max(0,s), amortizacao:a, juros:j, prestacao:p,
+      vencimento:addPeriodos(f.dtContratacao, i, per), status:"Pendente"});
+    s=Math.max(0, s-a);
   }
   return tab;
 }
-function calcTabelaPRICE(f){
-  const tm=(f.taxa||0)/100/12,n=Math.max(1,(f.prazo||1)-(f.carencia||0));
+
+// PRICE mensal (mantido para compatibilidade)
+function calcTabelaPRICE(f) {
+  const tm=(f.taxa||0)/100/12, n=Math.max(1,(f.prazo||1)-(f.carencia||0));
   const pmt=tm>0?(f.valor||0)*(tm*Math.pow(1+tm,n))/(Math.pow(1+tm,n)-1):(f.valor||0)/n;
   const tab=[];let s=f.valor||0;
   for(let i=1;i<=(f.prazo||1);i++){
@@ -102,6 +134,19 @@ function calcTabelaPRICE(f){
     s=Math.max(0,s-a);
   }
   return tab;
+}
+
+// Roteador central — escolhe a função certa pelo tipo/sistema
+function calcTabela(f) {
+  const tipo = f.tipo||"";
+  const sist = f.sistema||"SAC";
+  if(sist==="Parcela Única" || tipo.startsWith("Custeio")) return calcTabelaCusteio(f);
+  if(sist==="PRICE")         return calcTabelaPRICE(f);
+  // SAC — periodicidade padrão por tipo
+  const per = f.periodicidade || (
+    ["Investimento","PRONAF","FCO","Outros"].includes(tipo) ? "anual" : "mensal"
+  );
+  return calcTabelaSAC({...f, periodicidade:per});
 }
 function useResponsive(){
   const [mob,setMob]=useState(typeof window!=="undefined"&&window.innerWidth<768);
