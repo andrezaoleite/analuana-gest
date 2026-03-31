@@ -1236,24 +1236,22 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
       )}
 
       {modal==="funcionarios" && (
-        <Modal title={editItem?"Editar Funcionário":"Novo Funcionário"} onClose={fechar} largura={560}>
+        <Modal title={editItem?"Editar Funcionário":"Novo Funcionário"} onClose={fechar} largura={520}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:0 }}>
             {F("Nome completo *","nome","text",true)}
             {F("Cargo *","cargo","text",true)}
             {F("Atividade","atividade","text",false,["Geral","Cacau","Coco","Leiteiro","Gado Corte"])}
-            {F("Salário Bruto (R$) *","salario","number",true)}
-            {F("Nº filhos (salário família)","numFilhos","number")}
+            {F("Data de admissão","dataAdmissao","date")}
+            {F("Nº filhos (Sal. Família)","numFilhos","number")}
           </div>
-          {Number(form.salario||0)<=1906.04 && Number(form.numFilhos||0)>0 && (
+          {Number(form.numFilhos||0)>0 && (
             <div style={{ padding:10,background:"#f0faf4",borderRadius:8,fontSize:12,color:"#2d6a4f",marginBottom:12 }}>
-              ✅ Salário família: {fmt(calcSalFamilia(0,Number(form.numFilhos)))} ({form.numFilhos} filho(s) × R$ 67,54)
+              ✅ Salário família: R$ 67,54 × {form.numFilhos} = {fmt(67.54*Number(form.numFilhos))} <span style={{color:"#9ca3af"}}>(aplicado quando sal. ≤ R$ 1.906,04)</span>
             </div>
           )}
-          {Number(form.salario||0)>1906.04 && Number(form.numFilhos||0)>0 && (
-            <div style={{ padding:10,background:"#fffbeb",borderRadius:8,fontSize:12,color:"#b45309",marginBottom:12 }}>
-              ⚠️ Salário acima de R$ 1.906,04 — não tem direito ao salário família.
-            </div>
-          )}
+          <div style={{ padding:10,background:"#fffbeb",borderRadius:8,fontSize:12,color:"#92400e",marginBottom:12 }}>
+            💡 O salário bruto é informado na <strong>Folha Salarial</strong>, pois pode variar a cada mês.
+          </div>
           <div style={{ display:"flex",justifyContent:"flex-end",gap:10 }}><BotaoSecundario onClick={fechar}>Cancelar</BotaoSecundario><BotaoP onClick={salvar}>💾 Salvar</BotaoP></div>
         </Modal>
       )}
@@ -1936,10 +1934,10 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
       {/* KPIs da última folha */}
       {folhas.length > 0 && (() => {
         const ult = folhas[0];
-        const tots = (ult.itens||[]).reduce((a,it)=>({sal:a.sal+(it.salarioBruto||0),liq:a.liq+(it.liquido||0),custo:a.custo+(it.custoEmpresa||0)}),{sal:0,liq:0,custo:0});
+        const tots = (Array.isArray(ult.itens)?ult.itens:[]).reduce((a,it)=>({sal:a.sal+(it.salarioBruto||0),liq:a.liq+(it.liquido||0),custo:a.custo+(it.custoEmpresa||0)}),{sal:0,liq:0,custo:0});
         return (
           <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:14,marginBottom:18}}>
-            <KpiCard label="Última Folha" value={`${MESES[(ult.mes||1)-1]}/${ult.ano}`} sub={ult.tipo==="13o"?"13º Salário":"Salário Normal"} color="#2d6a4f" icon="📋" trend={0}/>
+            <KpiCard label="Última Folha" value={`${MESES[(ult.mes||1)-1]}/${ult.ano}`} sub={(ult.tipo||"normal")==="13o"?"13º Salário":"Salário Normal"} color="#2d6a4f" icon="📋" trend={0}/>
             <KpiCard label="Total Bruto"  value={fmt(tots.sal)}   color="#d4a017" icon="💰" trend={0}/>
             <KpiCard label="Total Líquido" value={fmt(tots.liq)} color="#2d6a4f" icon="✅" trend={0}/>
             <KpiCard label="Custo Empresa" value={fmt(tots.custo)} color="#e76f51" icon="🏢" trend={0}/>
@@ -1947,7 +1945,7 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
         );
       })()}
 
-      <TabBar tabs={[{id:"historico",label:"📂 Histórico"},{id:"nova",label:"➕ Nova Folha"},{id:"preview",label:"👁 Preview",hidden:!folhaAtiva}].filter(t=>!t.hidden)} active={aba} onChange={setAba}/>
+      <TabBar tabs={[{id:"historico",label:"📂 Histórico"},{id:"nova",label:"➕ Nova Folha"},...(folhaAtiva?[{id:"preview",label:"👁 Preview"}]:[])]} active={aba} onChange={setAba}/>
 
       {/* ── NOVA FOLHA ── */}
       {aba==="nova" && (
@@ -1998,10 +1996,10 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
                       <div>
                         <div style={{fontSize:15,fontWeight:700,color:"#1a1a2e"}}>
-                          {tipo==="13o"?"🎄 13º Salário":"💰 Salário"} — {MESES[(f.mes||1)-1]}/{f.ano}
+                          {tipo==="13o"?"🎄 13º Salário":"💰 Salário"} — {MESES[(Number(f.mes)||1)-1]}/{f.ano}
                           <span style={{marginLeft:10,padding:"2px 10px",borderRadius:8,fontSize:11,fontWeight:600,background:f.tipo==="13o"?"#fef3c7":"#d8f3dc",color:f.tipo==="13o"?"#b45309":"#2d6a4f"}}>{f.tipo==="13o"?"13º":"Normal"}</span>
                         </div>
-                        <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{(f.itens||[]).length} funcionários · Bruto: {fmt(tots.sal)} · Líquido: {fmt(tots.liq)}</div>
+                        <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{(Array.isArray(f.itens)?f.itens:[]).length} funcionários · Bruto: {fmt(tots.sal)} · Líquido: {fmt(tots.liq)}</div>
                       </div>
                       <button onClick={()=>{setFolhaAtiva(f);setAba("preview");}} style={{padding:"7px 14px",background:"none",border:"1px solid #b7e4c7",borderRadius:6,cursor:"pointer",color:"#2d6a4f",fontSize:12,fontWeight:600}}>
                         👁 Ver Folha
@@ -2019,7 +2017,7 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
             <div>
               <div style={{fontSize:16,fontWeight:700,color:"#1b4332"}}>
-                {folhaAtiva.tipo==="13o"?"🎄 13º Salário":"💰 Folha Salarial"} — {MESES[(folhaAtiva.mes||1)-1]}/{folhaAtiva.ano}
+                {folhaAtiva.tipo==="13o"?"🎄 13º Salário":"💰 Folha Salarial"} — {MESES[(Number(folhaAtiva.mes)||1)-1]}/{folhaAtiva.ano}
               </div>
               <div style={{fontSize:12,color:"#6b7280"}}>{(folhaAtiva.itens||[]).length} funcionários</div>
             </div>
