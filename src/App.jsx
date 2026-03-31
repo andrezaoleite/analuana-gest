@@ -516,7 +516,7 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
 
 // ── FINANCEIRO ────────────────────────────────────────────
 function FinanceiroView({ funcionarios, despesas, receitas }) {
-  const [tab, setTab] = useState("folha");
+  const [tab, setTab] = useState("encargos");
 
   const totalSalBruto = 0;
   const totalSalFam   = 0;
@@ -1069,7 +1069,7 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
             <table style={{ width:"100%",borderCollapse:"collapse" }}>
               <thead><tr>{["Nome","Cargo","Atividade","Salário","Filhos (sal.fam.)","Sal. Família","Status","Ações"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr></thead>
               <tbody>{funcionarios.map((f,i)=>{
-                const sf = calcSalFamilia(f.salario,f.numFilhos||0);
+                const sf = 67.54 * (f.numFilhos||0);
                 return (
                   <tr key={f.id} style={{ background:i%2?"#fafafa":"white" }}>
                     <td style={{...tdS,fontWeight:600}}>{f.nome}</td>
@@ -1888,7 +1888,7 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd }) {
 
   return (
     <div>
-      <SecHeader title="📋 Folha Salarial" sub="Geração mensal de folha de pagamento"/>
+      <SectionHeader title="📋 Folha Salarial" sub="Geração mensal de folha de pagamento"/>
 
       {/* KPIs da última folha */}
       {folhas.length > 0 && (() => {
