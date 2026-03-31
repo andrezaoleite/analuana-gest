@@ -2477,37 +2477,40 @@ export default function App() {
 
   // ── Carregar dados do Supabase ─────────────────────────
   useEffect(() => {
+    const sb = async (table, query) => {
+      try { return await query; }
+      catch(e) { console.warn("Erro ao carregar "+table+":", e.message); return {data:null,error:e}; }
+    };
+
     const carregar = async () => {
-      try {
-        const [cfg, func, prod, desp, rec, animL, animC, vac, past, fin, fol] = await Promise.all([
-          supabase.from("config_fazenda").select("*").eq("id","principal").single(),
-          supabase.from("funcionarios").select("*").order("nome"),
-          supabase.from("producao").select("*").order("data", {ascending:false}),
-          supabase.from("despesas").select("*").order("data", {ascending:false}),
-          supabase.from("receitas").select("*").order("data", {ascending:false}),
-          supabase.from("animais_leiteiro").select("*"),
-          supabase.from("animais_corte").select("*"),
-          supabase.from("vacinas").select("*").order("data"),
-          supabase.from("pastagens").select("*").order("nome"),
-          supabase.from("financiamentos").select("*").order("criado_em"),
-          supabase.from("folhas").select("*, folha_itens(*)").order("ano", {ascending:false}).order("mes", {ascending:false}),
-        ]);
-        if(cfg.data)    setConfig(c => ({...c, ...toCamel(cfg.data)}));
-        if(func.data?.length)  setFuncionarios(func.data.map(toCamel));
-        if(prod.data?.length)  setProducao(prod.data.map(toCamel));
-        if(desp.data?.length)  setDespesas(desp.data.map(toCamel));
-        if(rec.data?.length)   setReceitas(rec.data.map(toCamel));
-        if(animL.data?.length) setAnimaisLeiteiro(animL.data.map(toCamel));
-        if(animC.data?.length) setAnimaisCorte(animC.data.map(toCamel));
-        if(vac.data?.length)   setVacinas(vac.data.map(toCamel));
-        if(past.data?.length)  setPastagens(past.data.map(toCamel));
-        if(fin.data?.length)   setFinanciamentos(fin.data.map(toCamel));
-        if(fol.data?.length)   setFolhas(fol.data.map(f=>({...toCamel(f), itens:(f.folha_itens||[]).map(toCamel)})));
-      } catch(e) {
-        console.error("Erro ao carregar dados:", e);
-      } finally {
-        setDbCarregado(true);
-      }
+      // Queries individuais — falha de uma não afeta as outras
+      const [cfg,func,prod,desp,rec,animL,animC,vac,past,fin,fol] = await Promise.all([
+        sb("config_fazenda",  supabase.from("config_fazenda").select("*").eq("id","principal").maybeSingle()),
+        sb("funcionarios",    supabase.from("funcionarios").select("*").order("nome")),
+        sb("producao",        supabase.from("producao").select("*").order("data",{ascending:false})),
+        sb("despesas",        supabase.from("despesas").select("*").order("data",{ascending:false})),
+        sb("receitas",        supabase.from("receitas").select("*").order("data",{ascending:false})),
+        sb("animais_leiteiro",supabase.from("animais_leiteiro").select("*")),
+        sb("animais_corte",   supabase.from("animais_corte").select("*")),
+        sb("vacinas",         supabase.from("vacinas").select("*").order("data")),
+        sb("pastagens",       supabase.from("pastagens").select("*").order("nome")),
+        sb("financiamentos",  supabase.from("financiamentos").select("*").order("criado_em")),
+        sb("folhas",          supabase.from("folhas").select("*, folha_itens(*)").order("ano",{ascending:false}).order("mes",{ascending:false})),
+      ]);
+
+      if(cfg?.data)         setConfig(c=>({...c,...toCamel(cfg.data)}));
+      if(func?.data?.length)  setFuncionarios(func.data.map(toCamel));
+      if(prod?.data?.length)  setProducao(prod.data.map(toCamel));
+      if(desp?.data?.length)  setDespesas(desp.data.map(toCamel));
+      if(rec?.data?.length)   setReceitas(rec.data.map(toCamel));
+      if(animL?.data?.length) setAnimaisLeiteiro(animL.data.map(toCamel));
+      if(animC?.data?.length) setAnimaisCorte(animC.data.map(toCamel));
+      if(vac?.data?.length)   setVacinas(vac.data.map(toCamel));
+      if(past?.data?.length)  setPastagens(past.data.map(toCamel));
+      if(fin?.data?.length)   setFinanciamentos(fin.data.map(toCamel));
+      if(fol?.data?.length)   setFolhas(fol.data.map(f=>({...toCamel(f),itens:(f.folha_itens||[]).map(toCamel)})));
+
+      setDbCarregado(true);
     };
     carregar();
   }, []);
