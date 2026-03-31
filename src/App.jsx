@@ -530,52 +530,11 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
   return (
     <div>
       <SectionHeader title="Módulo Financeiro" sub="Folha de pagamento, encargos, tributos, despesas e receitas"/>
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:18 }}>
-        <KpiCard label="Total Salários Brutos" value={fmt(totalSalBruto)} color="#2d6a4f" icon="👥" trend={0}/>
-        <KpiCard label="Encargos Patronais"    value={fmt(totalEncPatr)}  color="#e76f51" icon="📊" trend={0}/>
-        <KpiCard label="Custo Total Folha"     value={fmt(totalFolha)}    color="#d4a017" icon="💼" trend={0}/>
+      <div style={{padding:"12px 16px",background:"#f0faf4",borderRadius:10,marginBottom:18,fontSize:13,color:"#1b4332",display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:20}}>📋</span>
+        <span>Os valores da folha de pagamento agora são gerados no módulo <strong>Folha Salarial</strong>. Aqui você consulta encargos, tributos, despesas e receitas.</span>
       </div>
-      <TabBar tabs={[{id:"folha",label:"Folha"},{id:"encargos",label:"Encargos"},{id:"tributos",label:"Tributos"},{id:"despesas",label:"Despesas"},{id:"receitas",label:"Receitas"}]} active={tab} onChange={setTab}/>
-
-      {tab==="folha" && (
-        <Card style={{ padding:0,overflow:"hidden" }}><div style={{overflowX:"auto"}}>
-          <table style={{ width:"100%",borderCollapse:"collapse",minWidth:480 }}>
-            <thead><tr>{["Nome","Cargo","Atividade","Salário Bruto","INSS Emp.(prog.)","Sal. Família","Líquido Aprox.","Custo Empresa",""].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr></thead>
-            <tbody>
-              {funcionarios.filter(f=>f.ativo).map((f,i)=>{
-                const inssEmp = calcINSSEmpregado(f.salario);
-                const salFam  = calcSalFamilia(f.salario, f.numFilhos||0);
-                const liquido = f.salario - inssEmp + salFam;
-                const encPatr = f.salario * (0.20+0.08+0.01+0.02+0.1111+0.0833);
-                return (
-                  <tr key={f.id} style={{ background:i%2?"#fafafa":"white" }}>
-                    <td style={{...tdS,fontWeight:600,color:"#1a1a2e"}}>{f.nome}</td>
-                    <td style={{...tdS,color:"#6b7280"}}>{f.cargo}</td>
-                    <td style={tdS}><span style={{ padding:"2px 8px",borderRadius:8,fontSize:11,background:"#f0faf4",color:"#2d6a4f",fontWeight:600 }}>{f.atividade}</span></td>
-                    <td style={tdS}>{fmt(f.salario)}</td>
-                    <td style={{...tdS,color:"#e76f51"}}>{fmt(inssEmp)}</td>
-                    <td style={{...tdS,color:"#2d6a4f",fontWeight:f.numFilhos>0?700:400}}>{f.numFilhos>0?fmt(salFam)+` (${f.numFilhos}f)`:"—"}</td>
-                    <td style={{...tdS,fontWeight:600}}>{fmt(liquido)}</td>
-                    <td style={{...tdS,fontWeight:700,color:"#1b4332"}}>{fmt(f.salario+encPatr)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr style={{ background:"#1b4332" }}>
-                <td colSpan={3} style={{ padding:"10px 12px",color:"white",fontWeight:700,fontSize:13 }}>TOTAIS</td>
-                <td style={{ padding:"10px 12px",color:"#95d5b2",fontWeight:700 }}>{fmt(totalSalBruto)}</td>
-                <td style={{ padding:"10px 12px",color:"#95d5b2",fontWeight:700 }}>{fmt(totalINSSEmp)}</td>
-                <td style={{ padding:"10px 12px",color:"#95d5b2",fontWeight:700 }}>{totalSalFam>0?fmt(totalSalFam):"—"}</td>
-                <td colSpan={2} style={{ padding:"10px 12px",color:"white",fontWeight:800 }}>{fmt(totalFolha)}</td>
-              </tr>
-            </tfoot>
-          </table></div>
-          <div style={{ padding:12,background:"#fffbeb",borderTop:"1px solid #fcd34d",fontSize:12,color:"#92400e" }}>
-            💡 <strong>Salário Família 2025:</strong> R$ 65,00/filho para funcionários com salário ≤ R$ 1.906,04 (Portaria MPS/MF nº 6/2025). INSS calculado progressivamente: 7,5% até R$1.518 · 9% até R$2.793,88 · 12% até R$4.190,83 · 14% até R$8.157,41.
-          </div>
-        </Card>
-      )}
+      <TabBar tabs={[{id:"encargos",label:"Encargos"},{id:"tributos",label:"Tributos"},{id:"despesas",label:"Despesas"},{id:"receitas",label:"Receitas"}]} active={tab} onChange={setTab}/>
 
       {tab==="encargos" && (
         <Card>
@@ -1116,7 +1075,7 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
                     <td style={{...tdS,fontWeight:600}}>{f.nome}</td>
                     <td style={{...tdS,color:"#6b7280"}}>{f.cargo}</td>
                     <td style={tdS}>{f.atividade}</td>
-                    <td style={tdS}>{fmt(f.salario)}</td>
+                    <td style={{...tdS,color:"#6b7280"}}>{f.dataAdmissao?new Date(f.dataAdmissao+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
                     <td style={{ ...tdS,textAlign:"center" }}>{f.numFilhos||0}</td>
                     <td style={{...tdS,color:"#2d6a4f",fontWeight:sf>0?600:400}}>{sf>0?fmt(sf):"—"}</td>
                     <td style={tdS}><span style={{ padding:"2px 9px",borderRadius:8,fontSize:11,fontWeight:600,background:f.ativo!==false?"#d8f3dc":"#fee2e2",color:f.ativo!==false?"#2d6a4f":"#dc2626" }}>{f.ativo!==false?"Ativo":"Inativo"}</span></td>
