@@ -2584,19 +2584,42 @@ export default function App() {
   }, []);
 
   // ── Helpers de persistência ────────────────────────────
+  // Colunas permitidas por tabela — evita enviar campos extras que o banco rejeita
+  const COLS = {
+    funcionarios:     ["id","nome","cargo","atividade","num_filhos","ativo","data_admissao"],
+    producao:         ["id","data","mes","cacau_kg","leite_l","coco_un","responsavel"],
+    despesas:         ["id","data","categoria","subcategoria","valor","descricao","fornecedor","nf"],
+    receitas:         ["id","data","atividade","valor","qtd","unitario","comprador","obs"],
+    animais_leiteiro: ["id","brinco","lote","qtd","status","prox_vacina","pasto"],
+    animais_corte:    ["id","brinco","categoria","peso_prev","peso_atual","dt_entrada","previsao_abate","pasto","status","custo_aquisicao"],
+    vacinas:          ["id","data","rebanho","lote","vacina","qtd","custo","status"],
+    pastagens:        ["id","nome","area","capacidade","atual","tipo","status","capim","dt_plantio","obs"],
+    financiamentos:   ["id","banco","tipo","finalidade","valor","taxa","carencia","prazo","dt_contratacao","dt_vencimento","sistema","periodicidade","meses_custeio","garantias","status","pagamentos"],
+    folhas:           ["id","mes","ano","tipo","status"],
+    folha_itens:      ["id","folha_id","funcionario_id","funcionario_nome","salario_bruto","inss","sal_familia","fgts","base_irrf","liquido","custo_empresa"],
+    config_fazenda:   ["id","nome_fazenda","preco_cacau","preco_leite","preco_coco","preco_arroba","atualizado_em"],
+  };
+  const filtrar = (table, row) => {
+    const cols = COLS[table];
+    if(!cols) return row;
+    return Object.fromEntries(Object.entries(row).filter(([k]) => cols.includes(k)));
+  };
   const dbAdd = async (table, item, setState) => {
-    const row = toSnake({...item});
-    delete row.criado_em;
+    const raw = toSnake({...item});
+    delete raw.criado_em;
+    const row = filtrar(table, raw);
     setState(prev => [...prev, item]);
-    const {error} = await supabase.from(table).insert(row);
-    if(error) console.error("dbAdd:", table, error.message);
+    const {data, error} = await supabase.from(table).insert(row).select();
+    if(error) console.error("dbAdd erro:", table, error.message, JSON.stringify(row));
+    else console.log("dbAdd OK:", table, data);
   };
   const dbUpdate = async (table, item, setState) => {
     setState(prev => prev.map(x => x.id === item.id ? item : x));
-    const row = toSnake({...item});
-    delete row.criado_em;
+    const raw = toSnake({...item});
+    delete raw.criado_em;
+    const row = filtrar(table, raw);
     const {error} = await supabase.from(table).update(row).eq("id", item.id);
-    if(error) console.error("dbUpdate:", table, error.message);
+    if(error) console.error("dbUpdate erro:", table, error.message, JSON.stringify(row));
   };
   const dbDelete = async (table, id, setState) => {
     setState(prev => prev.filter(x => x.id !== id));
