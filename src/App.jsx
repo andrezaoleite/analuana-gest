@@ -191,8 +191,8 @@ const VACINAS_INIT = [
 const CAPINS = ["Brachiaria brizantha","Brachiaria decumbens","Panicum maximum (Mombaça)","Panicum maximum (Tanzania)","Cynodon (Tifton 85)","Andropogon gayanus","Pennisetum purpureum","Piatã","Xaraés","Marandu","Nativo/Misto"];
 const STATUS_PASTO = ["Em uso","Descanso","Em reforma","Vedado","Reserva"];
 const TIPO_PASTO   = ["Leiteiro","Corte","Misto","Reserva"];
-const TIPO_FINANC  = ["Custeio","Investimento","PRONAF","FCO","Outros"];
-const SISTEMA_AMORT= ["SAC","PRICE"];
+const TIPO_FINANC  = ["Custeio Agrícola","Custeio Pecuário Leite","Custeio Pecuário Corte","Investimento","PRONAF","FCO","Outros"];
+const SISTEMA_AMORT= ["SAC","SAC Semestral","PRICE","Parcela Única"];
 const PASTAGENS_INIT = [
   { id:1, nome:"Pasto Norte",    area:45, capacidade:30, atual:28, tipo:"Leiteiro", status:"Em uso",   capim:"Brachiaria brizantha", dtPlantio:"2018-03", obs:"Principal pasto das matrizes" },
   { id:2, nome:"Pasto Sul",      area:32, capacidade:22, atual:18, tipo:"Misto",    status:"Em uso",   capim:"Panicum maximum (Mombaça)", dtPlantio:"2019-06", obs:"" },
@@ -415,7 +415,7 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
             <KpiCard label="Receita Total" value={fmt(recTotal)} color="#2d6a4f" icon="💰" trend={1}/>
             <KpiCard label="Despesas"      value={fmt(cstTotal)} color="#e76f51" icon="📋" trend={0}/>
             <KpiCard label="Lucro Consol." value={fmt(lucTotal)} color={lucTotal>=0?"#d4a017":"#e76f51"} icon="📈" trend={lucTotal>=0?1:-1}/>
-            <KpiCard label="Dívida Bancária" value={fmt((financiamentos||[]).filter(f=>f.status==="Ativo").reduce((s,f)=>{const t=f.sistema==="SAC"?calcTabelaSAC(f):calcTabelaPRICE(f);const p=t.find(p=>!(f.pagamentos||[]).includes(p.parcela));return s+(p?p.saldo:0);},0))} color="#457b9d" icon="🏦" trend={-1}/>
+            <KpiCard label="Dívida Bancária" value={fmt((financiamentos||[]).filter(f=>f.status==="Ativo").reduce((s,f)=>{const t=calcTabela(f);const p=t.find(p=>!(f.pagamentos||[]).includes(p.parcela));return s+(p?p.saldo:0);},0))} color="#457b9d" icon="🏦" trend={-1}/>
           </div>
 
           <div style={{ display:"grid",gridTemplateColumns:"3fr 2fr",gap:14,marginBottom:14 }}>
@@ -1521,25 +1521,45 @@ function PastagensView({ pastagens, setPastagens, dbAdd, dbUpdate, dbDelete }) {
 // ── FINANCIAMENTOS ─────────────────────────────────────────
 function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, dbAdd, dbUpdate, dbDelete }) {
   const mob = useResponsive();
-  const [tab, setTab]       = useState("lista");
-  const [modal, setModal]   = useState(false);
+  const [tab, setTab]         = useState("lista");
+  const [modal, setModal]     = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm]     = useState({});
+  const [form, setForm]       = useState({});
   const [confirm, setConfirm] = useState(null);
   const [detalhe, setDetalhe] = useState(null);
   const [pgModal, setPgModal] = useState(null);
 
-  const abrirAdd  = () => { setEditItem(null); setForm({ sistema:"SAC", carencia:0, status:"Ativo", dtContratacao:hoje() }); setModal(true); };
+  // Detectar tipo de financiamento para adaptar formulário
+  const isCusteio = t => (t||"").startsWith("Custeio");
+  const isInvest  = t => ["Investimento","PRONAF","FCO"].includes(t||"");
+
+  const abrirAdd  = () => {
+    setEditItem(null);
+    setForm({ sistema:"SAC", periodicidade:"anual", carencia:0, status:"Ativo", dtContratacao:hoje(), mesesCusteio:12 });
+    setModal(true);
+  };
   const abrirEdit = item => { setEditItem(item); setForm({...item}); setModal(true); };
   const fechar    = () => { setModal(false); setEditItem(null); setForm({}); };
 
-  const getTab    = f => f.sistema==="SAC" ? calcTabelaSAC(f) : calcTabelaPRICE(f);
-  const getSaldo  = f => { const t=getTab(f); const p=t.find(p=>!(f.pagamentos||[]).includes(p.parcela)); return p?p.saldo:0; };
-  const getProx   = f => getTab(f).find(p=>!(f.pagamentos||[]).includes(p.parcela));
+  // Adaptar sistema e periodicidade quando o tipo muda
+  const setTipo = v => {
+    if(isCusteio(v)) setForm(f=>({...f, tipo:v, sistema:"Parcela Única", periodicidade:"unica"}));
+    else if(v==="Custeio Pecuário Leite") setForm(f=>({...f, tipo:v, sistema:"SAC", periodicidade:"mensal"}));
+    else setForm(f=>({...f, tipo:v, sistema:"SAC", periodicidade:"anual"}));
+  };
+
+  const getSaldo = f => { const t=calcTabela(f); const p=t.find(p=>!(f.pagamentos||[]).includes(p.parcela)); return p?p.saldo:0; };
+  const getProx  = f => calcTabela(f).find(p=>!(f.pagamentos||[]).includes(p.parcela));
 
   const salvar = () => {
     setConfirm({ msg:editItem?"Confirmar alteração?":"Confirmar inclusão?", danger:false, onSim:() => {
-      const item = { ...form, id:editItem?.id||uid(), valor:Number(form.valor), taxa:Number(form.taxa), carencia:Number(form.carencia||0), prazo:Number(form.prazo), pagamentos:editItem?.pagamentos||[] };
+      const item = {
+        ...form, id:editItem?.id||uid(),
+        valor:Number(form.valor)||0, taxa:Number(form.taxa)||0,
+        carencia:Number(form.carencia)||0, prazo:Number(form.prazo)||0,
+        mesesCusteio:Number(form.mesesCusteio)||12,
+        pagamentos:editItem?.pagamentos||[]
+      };
       if(editItem) dbUpdate("financiamentos", item, setFinanciamentos);
       else dbAdd("financiamentos", item, setFinanciamentos);
       fechar(); setConfirm(null);
@@ -1549,67 +1569,92 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
     setConfirm({ msg:`Excluir "${nome}"?`, danger:true, onSim:() => { dbDelete("financiamentos", id, setFinanciamentos); setConfirm(null); }});
   };
   const pagar = (fin, parc) => {
-    setConfirm({ msg:`Pagar parcela ${parc.parcela} — ${fmt(parc.prestacao)}? Será lançada como despesa.`, danger:false, onSim:() => {
+    setConfirm({ msg:`Confirmar pagamento de ${fmt(parc.prestacao)}? Será lançado como despesa.`, danger:false, onSim:() => {
       const finAtualizado = {...fin, pagamentos:[...(fin.pagamentos||[]),parc.parcela]};
       dbUpdate("financiamentos", finAtualizado, setFinanciamentos);
-      const desp = { id:uid(), data:hoje(), categoria:"Financiamentos", subcategoria:"Amortização", valor:parc.prestacao, descricao:`${fin.banco} – Parc.${parc.parcela}/${fin.prazo}`, fornecedor:fin.banco, nf:null };
+      const desp = {
+        id:uid(), data:hoje(), categoria:"Financiamentos", subcategoria:"Amortização",
+        valor:parc.prestacao,
+        descricao:`${fin.banco} – ${fin.finalidade} – Parc.${parc.parcela}${fin.sistema!=="Parcela Única"?`/${isCusteio(fin.tipo)?1:fin.prazo}`:""}`,
+        fornecedor:fin.banco, nf:null
+      };
       dbAdd("despesas", desp, setDespesas);
       setPgModal(null); setConfirm(null);
     }});
   };
 
-  const ativos = financiamentos.filter(f=>f.status==="Ativo");
+  const ativos      = financiamentos.filter(f=>f.status==="Ativo");
   const dividaTotal = ativos.reduce((s,f)=>s+getSaldo(f),0);
-  const proxList = ativos.map(f=>({...f,prox:getProx(f),saldo:getSaldo(f)})).filter(f=>f.prox).sort((a,b)=>(a.prox?.vencimento||"").localeCompare(b.prox?.vencimento||""));
-  const tCor = t => t==="PRONAF"?"#2d6a4f":t==="Custeio"?"#d4a017":"#457b9d";
-  const F = (label,campo,type="text",req=false,opts=null) => <Campo label={label} value={form[campo]||""} onChange={v=>setForm({...form,[campo]:v})} type={type} required={req} options={opts}/>;
-  const thS = { padding:"8px 10px", textAlign:"left", fontSize:11, color:"#6b7280", fontWeight:600, borderBottom:"1px solid #e5e7eb", background:"#f8faf9", whiteSpace:"nowrap" };
-  const tdS = { padding:"8px 10px", fontSize:12, borderBottom:"1px solid #f3f4f6" };
+  const proxList    = ativos.map(f=>({...f,prox:getProx(f),saldo:getSaldo(f)})).filter(f=>f.prox).sort((a,b)=>(a.prox?.vencimento||"").localeCompare(b.prox?.vencimento||""));
+  const tCor = t => (t||"").startsWith("Custeio")?"#d4a017":t==="PRONAF"?"#2d6a4f":"#457b9d";
+  const thS  = {padding:"8px 10px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,borderBottom:"1px solid #e5e7eb",background:"#f8faf9",whiteSpace:"nowrap"};
+  const tdS  = {padding:"8px 10px",fontSize:12,borderBottom:"1px solid #f3f4f6"};
+
+  // Badge do sistema / periodicidade
+  const badgeSist = f => {
+    if(isCusteio(f.tipo)) return {label:"Parcela Única",bg:"#fef3c7",cl:"#b45309"};
+    if(f.sistema==="SAC Semestral") return {label:"SAC Semestral",bg:"#dbeafe",cl:"#1d4ed8"};
+    if(f.sistema==="PRICE") return {label:"PRICE",bg:"#f3e8ff",cl:"#7c3aed"};
+    const per = f.periodicidade||"anual";
+    return {label:`SAC ${per}`,bg:"#dbeafe",cl:"#1d4ed8"};
+  };
+
+  // Campo auxiliar
+  const F = (label,campo,type="text",req=false,opts=null,ph="") =>
+    <Campo label={label} value={form[campo]||""} onChange={v=>setForm({...form,[campo]:v})} type={type} required={req} options={opts} placeholder={ph}/>;
 
   return (
     <div>
-      <SectionHeader title="Financiamentos Rurais" sub="Contratos SAC e PRICE — amortização e pagamentos"/>
-      <div style={{ display:"grid", gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)", gap:14, marginBottom:18 }}>
-        <KpiCard label="Dívida Total"      value={fmt(dividaTotal)} color="#e76f51" icon="🏦" trend={-1}/>
-        <KpiCard label="Contratos Ativos"  value={`${ativos.length}`} color="#457b9d" icon="📄" trend={0}/>
-        <KpiCard label="Próx. Vencimento"  value={proxList.length>0?proxList[0].prox?.vencimento:"—"} color="#d4a017" icon="📅" trend={0}/>
-        <KpiCard label="Valor Próx."       value={proxList.length>0?fmt(proxList[0].prox?.prestacao):fmt(0)} color="#2d6a4f" icon="💰" trend={0}/>
+      <SectionHeader title="Financiamentos Rurais" sub="Custeio e investimento — amortização alinhada à safra"/>
+      <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:14,marginBottom:18}}>
+        <KpiCard label="Dívida Total"     value={fmt(dividaTotal)}  color="#e76f51" icon="🏦" trend={-1}/>
+        <KpiCard label="Contratos Ativos" value={`${ativos.length}`} color="#457b9d" icon="📄" trend={0}/>
+        <KpiCard label="Próx. Vencimento" value={proxList[0]?.prox?.vencimento||"—"} color="#d4a017" icon="📅" trend={0}/>
+        <KpiCard label="Próx. Valor"      value={fmt(proxList[0]?.prox?.prestacao||0)} color="#2d6a4f" icon="💰" trend={0}/>
       </div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
         <TabBar tabs={[{id:"lista",label:"📋 Contratos"},{id:"posicao",label:"📊 Posição"}]} active={tab} onChange={setTab}/>
-        <button onClick={abrirAdd} style={{ padding:"9px 18px", background:"#1b4332", color:"white", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:13 }}>+ Novo Financiamento</button>
+        <button onClick={abrirAdd} style={{padding:"9px 18px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13}}>+ Novo Financiamento</button>
       </div>
 
       {tab==="lista" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          {financiamentos.map(f => {
-            const saldo=getSaldo(f); const prox=getProx(f); const tc=tCor(f.tipo);
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          {financiamentos.length===0 && <Card><div style={{textAlign:"center",padding:30,color:"#9ca3af"}}>Nenhum financiamento cadastrado.</div></Card>}
+          {financiamentos.map(f=>{
+            const saldo=getSaldo(f), prox=getProx(f), tc=tCor(f.tipo), bs=badgeSist(f);
+            const tabela=calcTabela(f), pagas=(f.pagamentos||[]).length;
             return (
               <Card key={f.id}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
                   <div>
-                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                      <span style={{ fontSize:15, fontWeight:700, color:"#1a1a2e" }}>🏦 {f.banco}</span>
-                      <span style={{ padding:"2px 8px", borderRadius:8, fontSize:11, fontWeight:700, background:tc+"22", color:tc }}>{f.tipo}</span>
-                      <span style={{ padding:"2px 8px", borderRadius:8, fontSize:11, fontWeight:600, background:f.sistema==="SAC"?"#dbeafe":"#f3e8ff", color:f.sistema==="SAC"?"#1d4ed8":"#7c3aed" }}>{f.sistema}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                      <span style={{fontSize:15,fontWeight:700,color:"#1a1a2e"}}>🏦 {f.banco}</span>
+                      <span style={{padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:700,background:tc+"22",color:tc}}>{f.tipo}</span>
+                      <span style={{padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,background:bs.bg,color:bs.cl}}>{bs.label}</span>
+                      <span style={{padding:"2px 8px",borderRadius:8,fontSize:11,background:f.status==="Ativo"?"#d8f3dc":"#f3f4f6",color:f.status==="Ativo"?"#2d6a4f":"#9ca3af"}}>{f.status}</span>
                     </div>
-                    <div style={{ fontSize:13, color:"#374151", marginBottom:2 }}>{f.finalidade}</div>
-                    <div style={{ fontSize:12, color:"#6b7280" }}>Taxa: {f.taxa}% a.a. · {f.prazo} meses · Carência: {f.carencia}m</div>
+                    <div style={{fontSize:13,color:"#374151",marginBottom:2}}>{f.finalidade}</div>
+                    <div style={{fontSize:12,color:"#6b7280"}}>
+                      Taxa: {f.taxa}% a.a.
+                      {!isCusteio(f.tipo)&&<> · Prazo: {f.prazo} {f.periodicidade==="anual"?"anos":"meses"}{f.carencia>0?` · Carência: ${f.carencia}m`:""}</>}
+                      {isCusteio(f.tipo)&&<> · Venc: {f.dtVencimento||"—"} · Prazo: {f.mesesCusteio||12} meses</>}
+                      {pagas>0&&<> · {pagas}/{tabela.length} pago(s)</>}
+                    </div>
                   </div>
-                  <div style={{ textAlign:"right", minWidth:130 }}>
-                    <div style={{ fontSize:11, color:"#6b7280" }}>Saldo devedor</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:"#e76f51" }}>{fmt(saldo)}</div>
-                    <div style={{ fontSize:11, color:"#9ca3af" }}>de {fmt(f.valor)}</div>
+                  <div style={{textAlign:"right",minWidth:130}}>
+                    <div style={{fontSize:11,color:"#6b7280"}}>Saldo devedor</div>
+                    <div style={{fontSize:18,fontWeight:800,color:"#e76f51"}}>{fmt(saldo)}</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>de {fmt(f.valor)}</div>
                   </div>
                 </div>
-                <div style={{ height:4, background:"#f3f4f6", borderRadius:2, margin:"10px 0 8px", overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${Math.min((saldo/f.valor)*100,100)}%`, background:"#e76f51", borderRadius:2 }}/>
+                <div style={{height:4,background:"#f3f4f6",borderRadius:2,margin:"10px 0 8px",overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.min((saldo/Math.max(f.valor,1))*100,100)}%`,background:"#e76f51",borderRadius:2}}/>
                 </div>
-                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                  <button onClick={()=>setDetalhe(f)} style={{ padding:"6px 12px", fontSize:12, background:"#f0faf4", border:"1px solid #b7e4c7", borderRadius:6, cursor:"pointer", color:"#1b4332", fontWeight:600 }}>📋 Tabela</button>
-                  {prox && <button onClick={()=>setPgModal({fin:f,parc:prox})} style={{ padding:"6px 12px", fontSize:12, background:"#1b4332", border:"none", borderRadius:6, cursor:"pointer", color:"white", fontWeight:600 }}>💳 Pagar Parcela {prox.parcela}</button>}
-                  <button onClick={()=>abrirEdit(f)} style={{ padding:"7px 12px", background:"none", color:"#2d6a4f", border:"1px solid #b7e4c7", borderRadius:6, cursor:"pointer", fontSize:12, fontWeight:600 }}>✏️ Editar</button>
-                  <button onClick={()=>excluir(f.id,f.banco)} style={{ padding:"7px 14px", background:"none", color:"#dc2626", border:"1px solid #fca5a5", borderRadius:6, cursor:"pointer", fontSize:12, fontWeight:600 }}>🗑</button>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button onClick={()=>setDetalhe(f)} style={{padding:"6px 12px",fontSize:12,background:"#f0faf4",border:"1px solid #b7e4c7",borderRadius:6,cursor:"pointer",color:"#1b4332",fontWeight:600}}>📋 Detalhes</button>
+                  {prox&&<button onClick={()=>setPgModal({fin:f,parc:prox})} style={{padding:"6px 12px",fontSize:12,background:"#1b4332",border:"none",borderRadius:6,cursor:"pointer",color:"white",fontWeight:600}}>💳 Registrar Pagamento</button>}
+                  <button onClick={()=>abrirEdit(f)} style={{padding:"7px 12px",background:"none",color:"#2d6a4f",border:"1px solid #b7e4c7",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600}}>✏️ Editar</button>
+                  <button onClick={()=>excluir(f.id,f.banco)} style={{padding:"7px 14px",background:"none",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600}}>🗑</button>
                 </div>
               </Card>
             );
@@ -1618,121 +1663,165 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
       )}
 
       {tab==="posicao" && (
-        <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:14 }}>
+        <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:14}}>
           <Card>
             <CardTitle>Saldo por Contrato</CardTitle>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={ativos.map(f=>({name:f.banco.slice(0,12),saldo:Math.round(getSaldo(f))}))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="name" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
-                <Tooltip formatter={v=>fmt(v)}/><Bar dataKey="saldo" fill="#e76f51" radius={[3,3,0,0]}/>
+                <XAxis dataKey="name" tick={{fontSize:10}}/>
+                <YAxis tick={{fontSize:9}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/>
+                <Bar dataKey="saldo" fill="#e76f51" radius={[3,3,0,0]}/>
               </BarChart>
             </ResponsiveContainer>
           </Card>
           <Card>
-            <CardTitle>Posição consolidada</CardTitle>
-            {proxList.map((f,i) => (
-              <div key={i} style={{ padding:"10px 0", borderBottom:"1px solid #f3f4f6" }}>
-                <div style={{ display:"flex", justifyContent:"space-between" }}>
+            <CardTitle>Próximos vencimentos</CardTitle>
+            {proxList.map((f,i)=>(
+              <div key={i} style={{padding:"10px 0",borderBottom:"1px solid #f3f4f6"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
                   <div>
-                    <div style={{ fontSize:13, fontWeight:600 }}>{f.banco}</div>
-                    <div style={{ fontSize:11, color:"#9ca3af" }}>Próx: {f.prox?.vencimento} — {fmt(f.prox?.prestacao)}</div>
+                    <div style={{fontSize:13,fontWeight:600}}>{f.banco}</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>{f.finalidade} · Venc: {f.prox?.vencimento}</div>
                   </div>
-                  <div style={{ fontSize:15, fontWeight:700, color:"#e76f51" }}>{fmt(f.saldo)}</div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#e76f51"}}>{fmt(f.saldo)}</div>
+                    <div style={{fontSize:11,color:"#9ca3af"}}>próx: {fmt(f.prox?.prestacao||0)}</div>
+                  </div>
                 </div>
               </div>
             ))}
-            <div style={{ marginTop:12, padding:"10px 0", borderTop:"2px solid #1b4332", display:"flex", justifyContent:"space-between" }}>
-              <span style={{ fontWeight:700, color:"#1b4332" }}>Total dívida</span>
-              <span style={{ fontSize:16, fontWeight:800, color:"#e76f51" }}>{fmt(dividaTotal)}</span>
+            <div style={{marginTop:12,padding:"10px 0",borderTop:"2px solid #1b4332",display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontWeight:700,color:"#1b4332"}}>Total dívida</span>
+              <span style={{fontSize:16,fontWeight:800,color:"#e76f51"}}>{fmt(dividaTotal)}</span>
             </div>
           </Card>
         </div>
       )}
 
-      {/* Modal tabela amortização */}
-      {detalhe && (() => {
-        const tabela=getTab(detalhe); const pagas=detalhe.pagamentos||[];
+      {/* Detalhe do contrato */}
+      {detalhe&&(()=>{
+        const tabela=calcTabela(detalhe), pagas=detalhe.pagamentos||[], bs=badgeSist(detalhe);
         return (
-          <Modal title={`Tabela — ${detalhe.banco}`} onClose={()=>setDetalhe(null)} largura={760}>
-            <div style={{ fontSize:12, color:"#6b7280", marginBottom:10 }}>{detalhe.finalidade} · {detalhe.sistema} · {detalhe.taxa}% a.a.</div>
-            <div style={{ maxHeight:400, overflow:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, minWidth:500 }}>
-                <thead style={{ position:"sticky", top:0 }}>
-                  <tr>{["Parc.","Venc.","Saldo","Amort.","Juros","Prestação","Tipo","Status"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr>
+          <Modal title={`📋 ${detalhe.banco} — ${detalhe.finalidade}`} onClose={()=>setDetalhe(null)} largura={760}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+              {[["Valor",fmt(detalhe.valor)],["Taxa",`${detalhe.taxa}% a.a.`],["Sistema",bs.label],
+                ["Contratação",detalhe.dtContratacao||"—"],["Status",detalhe.status],
+                isCusteio(detalhe.tipo)?["Vencimento",detalhe.dtVencimento||"—"]:["Prazo",`${detalhe.prazo} per.`]
+              ].map(([l,v],i)=>(
+                <div key={i} style={{padding:"8px 12px",background:"#f8faf9",borderRadius:6}}>
+                  <div style={{fontSize:10,color:"#6b7280"}}>{l}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{maxHeight:380,overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:480}}>
+                <thead style={{position:"sticky",top:0}}>
+                  <tr>{["Parc.","Vencimento","Saldo","Amort.","Juros","Total","Tipo","Status"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {tabela.map((p,i) => {
+                  {tabela.map((p,i)=>{
                     const paga=pagas.includes(p.parcela);
                     return (
-                      <tr key={i} style={{ background:paga?"#f0faf4":i%2?"#fafafa":"white" }}>
+                      <tr key={i} style={{background:paga?"#f0faf4":i%2?"#fafafa":"white"}}>
                         <td style={{...tdS,fontWeight:700}}>{p.parcela}</td>
                         <td style={{...tdS,color:"#6b7280"}}>{p.vencimento}</td>
                         <td style={tdS}>{fmt(p.saldo)}</td>
                         <td style={{...tdS,color:"#2d6a4f"}}>{p.amortizacao>0?fmt(p.amortizacao):"—"}</td>
                         <td style={{...tdS,color:"#e76f51"}}>{fmt(p.juros)}</td>
                         <td style={{...tdS,fontWeight:700,color:"#1b4332"}}>{fmt(p.prestacao)}</td>
-                        <td style={tdS}><span style={{ fontSize:10, padding:"1px 6px", borderRadius:6, background:p.tipo==="Carência"?"#fef3c7":"#f0faf4", color:p.tipo==="Carência"?"#b45309":"#2d6a4f" }}>{p.tipo}</span></td>
-                        <td style={tdS}><span style={{ fontSize:10, padding:"1px 6px", borderRadius:6, background:paga?"#d8f3dc":"#fee2e2", color:paga?"#2d6a4f":"#dc2626" }}>{paga?"✅ Pago":"Pendente"}</span></td>
+                        <td style={tdS}><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,background:p.tipo==="Carência"?"#fef3c7":"#f0faf4",color:p.tipo==="Carência"?"#b45309":"#2d6a4f"}}>{p.tipo}</span></td>
+                        <td style={tdS}><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,background:paga?"#d8f3dc":"#fee2e2",color:paga?"#2d6a4f":"#dc2626"}}>{paga?"✅ Pago":"Pendente"}</span></td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <div style={{ display:"flex", justifyContent:"flex-end", marginTop:12 }}>
-              <button onClick={()=>setDetalhe(null)} style={{ padding:"9px 16px", background:"#f3f4f6", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, cursor:"pointer", fontSize:13 }}>Fechar</button>
+            <div style={{display:"flex",justifyContent:"flex-end",marginTop:12}}>
+              <button onClick={()=>setDetalhe(null)} style={{padding:"9px 16px",background:"#f3f4f6",color:"#374151",border:"1px solid #e5e7eb",borderRadius:8,cursor:"pointer",fontSize:13}}>Fechar</button>
             </div>
           </Modal>
         );
       })()}
 
       {/* Modal pagamento */}
-      {pgModal && (
+      {pgModal&&(
         <Modal title="💳 Registrar Pagamento" onClose={()=>setPgModal(null)} largura={420}>
-          <div style={{ marginBottom:16, padding:14, background:"#f8faf9", borderRadius:8 }}>
-            <div style={{ fontSize:13, fontWeight:700 }}>{pgModal.fin.banco} — Parcela {pgModal.parc.parcela}/{pgModal.fin.prazo}</div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10, fontSize:12 }}>
+          <div style={{marginBottom:16,padding:14,background:"#f8faf9",borderRadius:8}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>{pgModal.fin.banco} — {pgModal.fin.finalidade}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:12}}>
               <div><span style={{color:"#6b7280"}}>Vencimento:</span> <strong>{pgModal.parc.vencimento}</strong></div>
-              <div><span style={{color:"#6b7280"}}>Prestação:</span> <strong style={{color:"#1b4332"}}>{fmt(pgModal.parc.prestacao)}</strong></div>
+              <div><span style={{color:"#6b7280"}}>Total:</span> <strong style={{color:"#1b4332"}}>{fmt(pgModal.parc.prestacao)}</strong></div>
               <div><span style={{color:"#6b7280"}}>Amortização:</span> {fmt(pgModal.parc.amortizacao)}</div>
               <div><span style={{color:"#6b7280"}}>Juros:</span> {fmt(pgModal.parc.juros)}</div>
             </div>
           </div>
-          <div style={{ fontSize:12, color:"#6b7280", marginBottom:16 }}>Será lançado em <strong>Financiamentos → Amortização</strong>.</div>
-          <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
-            <button onClick={()=>setPgModal(null)} style={{ padding:"9px 16px", background:"#f3f4f6", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, cursor:"pointer", fontSize:13 }}>Cancelar</button>
-            <button onClick={()=>pagar(pgModal.fin,pgModal.parc)} style={{ padding:"9px 18px", background:"#1b4332", color:"white", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:13 }}>✅ Confirmar Pagamento</button>
+          <p style={{fontSize:12,color:"#6b7280",marginBottom:16}}>Será lançado em <strong>Despesas → Financiamentos → Amortização</strong> com a data de hoje.</p>
+          <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
+            <button onClick={()=>setPgModal(null)} style={{padding:"9px 16px",background:"#f3f4f6",color:"#374151",border:"1px solid #e5e7eb",borderRadius:8,cursor:"pointer",fontSize:13}}>Cancelar</button>
+            <button onClick={()=>pagar(pgModal.fin,pgModal.parc)} style={{padding:"9px 18px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13}}>✅ Confirmar Pagamento</button>
           </div>
         </Modal>
       )}
 
-      {/* Modal cadastro */}
-      {modal && (
-        <Modal title={editItem?"Editar Financiamento":"Novo Financiamento"} onClose={fechar} largura={640}>
-          <div style={{ display:"grid", gridTemplateColumns:mob?"1fr":"1fr 1fr", gap:0 }}>
-            {F("Banco *","banco","text",true,["Banco do Brasil","BNB – Nordeste","Caixa Econômica","Sicoob","Sicredi","Bradesco","Outros"])}
-            {F("Tipo *","tipo","text",true,TIPO_FINANC)}
-            {F("Finalidade *","finalidade","text",true)}
-            {F("Valor (R$) *","valor","number",true)}
-            {F("Taxa (% a.a.) *","taxa","number",true)}
-            {F("Carência (meses)","carencia","number")}
-            {F("Prazo (meses) *","prazo","number",true)}
-            {F("Sistema *","sistema","text",true,SISTEMA_AMORT)}
-            {F("Data contratação *","dtContratacao","date",true)}
-            {F("Status","status","text",false,["Ativo","Quitado","Renegociado"])}
-            <div style={{ gridColumn:"1/-1" }}>{F("Garantias","garantias","text")}</div>
+      {/* Modal cadastro/edição */}
+      {modal&&(
+        <Modal title={editItem?"Editar Financiamento":"Novo Financiamento"} onClose={fechar} largura={660}>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:0}}>
+            {/* Banco e tipo sempre */}
+            <Campo label="Banco *" value={form.banco||""} onChange={v=>setForm({...form,banco:v})} options={["Banco do Brasil","BNB – Nordeste","Caixa Econômica","Sicoob","Sicredi","Bradesco","Outros"]} required/>
+            <Campo label="Tipo *" value={form.tipo||""} onChange={setTipo} options={TIPO_FINANC} required/>
+            <div style={{gridColumn:"1/-1"}}><Campo label="Finalidade *" value={form.finalidade||""} onChange={v=>setForm({...form,finalidade:v})} required placeholder="Ex: Custeio safra cacau 2025/26"/></div>
+            <Campo label="Valor financiado (R$) *" value={form.valor||""} onChange={v=>setForm({...form,valor:v})} type="number" required/>
+            <Campo label="Taxa de juros (% a.a.) *" value={form.taxa||""} onChange={v=>setForm({...form,taxa:v})} type="number" required placeholder="Ex: 7.5"/>
+            <Campo label="Data de contratação *" value={form.dtContratacao||""} onChange={v=>setForm({...form,dtContratacao:v})} type="date" required/>
+
+            {/* Campos específicos para CUSTEIO */}
+            {isCusteio(form.tipo)&&<>
+              <Campo label="Data de vencimento *" value={form.dtVencimento||""} onChange={v=>setForm({...form,dtVencimento:v})} type="date" required/>
+              <Campo label="Prazo (meses)" value={form.mesesCusteio||""} onChange={v=>setForm({...form,mesesCusteio:v})} type="number" placeholder="Ex: 12"/>
+            </>}
+
+            {/* Campos específicos para INVESTIMENTO */}
+            {!isCusteio(form.tipo)&&<>
+              <Campo label="Periodicidade das parcelas *" value={form.periodicidade||"anual"} onChange={v=>setForm({...form,periodicidade:v})} options={["anual","semestral","mensal"]} required/>
+              <Campo label={`Prazo (${form.periodicidade==="anual"?"anos":form.periodicidade==="semestral"?"semestres":"meses"}) *`} value={form.prazo||""} onChange={v=>setForm({...form,prazo:v})} type="number" required placeholder={form.periodicidade==="anual"?"Ex: 8":"Ex: 60"}/>
+              <Campo label="Carência (meses)" value={form.carencia||""} onChange={v=>setForm({...form,carencia:v})} type="number" placeholder="Ex: 24"/>
+              <Campo label="Sistema de amortização *" value={form.sistema||"SAC"} onChange={v=>setForm({...form,sistema:v})} options={["SAC","SAC Semestral","PRICE"]} required/>
+            </>}
+
+            <Campo label="Garantias" value={form.garantias||""} onChange={v=>setForm({...form,garantias:v})} placeholder="Ex: Penhor da safra, Hipoteca"/>
+            <Campo label="Status" value={form.status||"Ativo"} onChange={v=>setForm({...form,status:v})} options={["Ativo","Quitado","Renegociado"]}/>
           </div>
-          <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
-            <button onClick={fechar} style={{ padding:"9px 16px", background:"#f3f4f6", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, cursor:"pointer", fontSize:13 }}>Cancelar</button>
-            <button onClick={salvar} style={{ padding:"9px 18px", background:"#1b4332", color:"white", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:13 }}>💾 Salvar</button>
+
+          {/* Preview rápido */}
+          {form.valor&&form.taxa&&(()=>{
+            const prev=calcTabela({...form,valor:Number(form.valor),taxa:Number(form.taxa),prazo:Number(form.prazo)||1,carencia:Number(form.carencia)||0,mesesCusteio:Number(form.mesesCusteio)||12,pagamentos:[]});
+            const total=prev.reduce((s,p)=>s+p.prestacao,0);
+            const totalJ=prev.reduce((s,p)=>s+p.juros,0);
+            return (
+              <div style={{marginTop:4,padding:"10px 14px",background:"#f0faf4",borderRadius:8,fontSize:12,color:"#1b4332",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                <div><div style={{color:"#6b7280",fontSize:11}}>Nº parcelas</div><strong>{prev.length}</strong></div>
+                <div><div style={{color:"#6b7280",fontSize:11}}>Total juros</div><strong>{fmt(totalJ)}</strong></div>
+                <div><div style={{color:"#6b7280",fontSize:11}}>Total a pagar</div><strong>{fmt(total)}</strong></div>
+              </div>
+            );
+          })()}
+
+          <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:12}}>
+            <button onClick={fechar} style={{padding:"9px 16px",background:"#f3f4f6",color:"#374151",border:"1px solid #e5e7eb",borderRadius:8,cursor:"pointer",fontSize:13}}>Cancelar</button>
+            <button onClick={salvar} style={{padding:"9px 18px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13}}>💾 Salvar</button>
           </div>
         </Modal>
       )}
-      {confirm && <Confirm msg={confirm.msg} danger={confirm.danger} onSim={confirm.onSim} onNao={()=>setConfirm(null)}/>}
+      {confirm&&<Confirm msg={confirm.msg} danger={confirm.danger} onSim={confirm.onSim} onNao={()=>setConfirm(null)}/>}
     </div>
   );
 }
+
 
 // ── CONFIGURAÇÕES ──────────────────────────────────────────
 function ConfiguracoesView({ config, setConfig }) {
@@ -2186,7 +2275,7 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
 
   // Evolução da dívida (saldo devedor de cada financiamento)
   const dividaAtual = financiamentos.filter(f=>f.status==="Ativo").reduce((s,f)=>{
-    const tab = f.sistema==="SAC"?calcTabelaSAC(f):calcTabelaPRICE(f);
+    const tab = calcTabela(f);
     const prox = tab.find(p=>!(f.pagamentos||[]).includes(p.parcela));
     return s+(prox?prox.saldo:0);
   },0);
@@ -2331,7 +2420,7 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
           <CardTitle>Evolução das Dívidas Bancárias</CardTitle>
           <div style={{display:"grid",gridTemplateColumns:mob?"1fr":financiamentos.filter(f=>f.status==="Ativo").length===1?"1fr":"1fr 1fr",gap:14}}>
             {financiamentos.filter(f=>f.status==="Ativo").map((fin,fi)=>{
-              const tab    = fin.sistema==="SAC"?calcTabelaSAC(fin):calcTabelaPRICE(fin);
+              const tab    = calcTabela(fin);
               const pagas  = fin.pagamentos||[];
               const prox   = tab.find(p=>!pagas.includes(p.parcela));
               const saldoAtual = prox?prox.saldo:0;
