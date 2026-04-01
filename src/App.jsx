@@ -84,18 +84,30 @@ const temAcesso = (perfil, modulo) => {
 const fmtData = dataStr => { if(!dataStr) return "—"; const [y,m,d] = dataStr.split("-"); return d?`${d}/${m}/${y}`:dataStr; };
 const addMeses = (dataStr, n) => { if(!dataStr) return "—"; const d=new Date(dataStr+"T12:00:00"); d.setMonth(d.getMonth()+n); return d.toISOString().slice(0,7); };
 // Adiciona N períodos (meses, semestres ou anos) a uma data
+// ── Helpers de data ──────────────────────────────────────────────────
+// Adiciona mPer meses a uma string "YYYY-MM"
 function addPeriodos(dtBase, n, periodicidade) {
   if(!dtBase) return "—";
   const meses = periodicidade==="anual"?12 : periodicidade==="semestral"?6 : 1;
   return addMeses(dtBase, n * meses);
 }
 
-// Custeio: parcela única no vencimento alinhado à safra
+// Diferença em meses entre duas datas "YYYY-MM" ou "YYYY-MM-DD"
+function diffMeses(dtA, dtB) {
+  if(!dtA||!dtB) return 0;
+  const a = new Date(dtA.slice(0,7)+"-01T12:00:00");
+  const b = new Date(dtB.slice(0,7)+"-01T12:00:00");
+  return (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth());
+}
+
+// ── Custeio — parcela única alinhada à safra ──────────────────────
 function calcTabelaCusteio(f) {
-  const taxa   = (f.taxa||0)/100;
-  const meses  = Number(f.mesesCusteio)||12;
-  const juros  = (f.valor||0) * taxa * (meses/12);
-  const venc   = f.dtVencimento || addMeses(f.dtContratacao, meses);
+  const taxa  = (f.taxa||0)/100;
+  const meses = f.dtVencimento
+    ? Math.max(1, diffMeses(f.dtContratacao, f.dtVencimento))
+    : (Number(f.mesesCusteio)||12);
+  const juros = (f.valor||0) * taxa * (meses/12);
+  const venc  = f.dtVencimento || addMeses(f.dtContratacao, meses);
   return [{
     parcela:1, tipo:"Parcela Única",
     saldo:f.valor||0, amortizacao:f.valor||0,
@@ -104,49 +116,92 @@ function calcTabelaCusteio(f) {
   }];
 }
 
-// SAC com periodicidade configurável (anual, semestral, mensal)
+// ── Investimento SAC ─────────────────────────────────────────────
+// Usa dt_primeira_parcela como âncora de todas as datas.
+// Carência é derivada automaticamente de (dtContratacao → dtPrimeiraParcela).
 function calcTabelaSAC(f) {
-  const per   = f.periodicidade||"mensal";
-  const mPer  = per==="anual"?12 : per==="semestral"?6 : 1;
-  const tPer  = (f.taxa||0)/100 * (mPer/12);
-  const carPer= Math.floor((Number(f.carencia)||0) / mPer);
-  const nAmort= Math.max(1, (Number(f.prazo)||1) - carPer);
-  const am    = (f.valor||0) / nAmort;
-  const tab=[]; let s=f.valor||0;
-  const total = carPer + nAmort;
-  for(let i=1; i<=total; i++) {
-    const j=s*tPer, ic=i<=carPer, a=ic?0:am, p=ic?j:a+j;
-    tab.push({parcela:i, tipo:ic?"Carência":"Normal",
-      saldo:Math.max(0,s), amortizacao:a, juros:j, prestacao:p,
-      vencimento:addPeriodos(f.dtContratacao, i, per), status:"Pendente"});
-    s=Math.max(0, s-a);
+  const per  = f.periodicidade||"anual";
+  const mPer = per==="anual"?12 : per==="semestral"?6 : 1;
+  // Taxa por período
+  const tPer = (f.taxa||0)/100 * (mPer/12);
+  // Número de parcelas de amortização
+  const n    = Math.max(1, Number(f.numParcelas||f.prazo)||1);
+  // Amortização por parcela (SAC = constante)
+  const am   = (f.valor||0) / n;
+  // Carência em meses (calculada pelas datas se disponível, senão manual)
+  const carenciaMeses = (f.dtContratacao && f.dtPrimeiraParcela)
+    ? Math.max(0, diffMeses(f.dtContratacao, f.dtPrimeiraParcela))
+    : (Number(f.carencia)||0);
+  // Base para calcular datas: dt_primeira_parcela ou derivada
+  const dtBase = f.dtPrimeiraParcela || addMeses(f.dtContratacao, carenciaMeses||mPer);
+
+  const tab = [];
+  // Linha de carência informativa (sem parcela de amortização)
+  if(carenciaMeses > 0) {
+    const txMensal = (f.taxa||0)/100/12;
+    const jurosCarencia = (f.valor||0) * txMensal * carenciaMeses;
+    tab.push({
+      parcela:0, tipo:"Carência",
+      saldo:f.valor||0, amortizacao:0,
+      juros:jurosCarencia, prestacao:jurosCarencia,
+      vencimento:dtBase, status:"Pendente",
+      isCarencia:true
+    });
+  }
+  // Parcelas de amortização
+  let s = f.valor||0;
+  for(let i=0; i<n; i++) {
+    const j = s * tPer;
+    const p = am + j;
+    const venc = addMeses(dtBase, i * mPer);
+    tab.push({
+      parcela:i+1, tipo:"Normal",
+      saldo:Math.max(0,s), amortizacao:am, juros:j, prestacao:p,
+      vencimento:venc, status:"Pendente"
+    });
+    s = Math.max(0, s - am);
   }
   return tab;
 }
 
-// PRICE mensal (mantido para compatibilidade)
+// ── Investimento PRICE ───────────────────────────────────────────
 function calcTabelaPRICE(f) {
-  const tm=(f.taxa||0)/100/12, n=Math.max(1,(f.prazo||1)-(f.carencia||0));
-  const pmt=tm>0?(f.valor||0)*(tm*Math.pow(1+tm,n))/(Math.pow(1+tm,n)-1):(f.valor||0)/n;
-  const tab=[];let s=f.valor||0;
-  for(let i=1;i<=(f.prazo||1);i++){
-    const j=s*tm,ic=i<=(f.carencia||0),a=ic?0:Math.max(0,pmt-j),p=ic?j:pmt;
-    tab.push({parcela:i,tipo:ic?"Carência":"Normal",saldo:Math.max(0,s),amortizacao:a,juros:j,prestacao:p,vencimento:addMeses(f.dtContratacao,i),status:"Pendente"});
-    s=Math.max(0,s-a);
+  const per  = f.periodicidade||"anual";
+  const mPer = per==="anual"?12 : per==="semestral"?6 : 1;
+  const tPer = (f.taxa||0)/100 * (mPer/12);
+  const n    = Math.max(1, Number(f.numParcelas||f.prazo)||1);
+  const pmt  = tPer>0 ? (f.valor||0)*(tPer*Math.pow(1+tPer,n))/(Math.pow(1+tPer,n)-1) : (f.valor||0)/n;
+  const carenciaMeses = (f.dtContratacao && f.dtPrimeiraParcela)
+    ? Math.max(0, diffMeses(f.dtContratacao, f.dtPrimeiraParcela))
+    : (Number(f.carencia)||0);
+  const dtBase = f.dtPrimeiraParcela || addMeses(f.dtContratacao, carenciaMeses||mPer);
+
+  const tab = [];
+  if(carenciaMeses > 0) {
+    const txMensal = (f.taxa||0)/100/12;
+    const jurosCarencia = (f.valor||0) * txMensal * carenciaMeses;
+    tab.push({parcela:0,tipo:"Carência",saldo:f.valor||0,amortizacao:0,juros:jurosCarencia,prestacao:jurosCarencia,vencimento:dtBase,status:"Pendente",isCarencia:true});
+  }
+  let s = f.valor||0;
+  for(let i=0; i<n; i++) {
+    const j = s*tPer;
+    const a = Math.max(0, pmt-j);
+    tab.push({parcela:i+1,tipo:"Normal",saldo:Math.max(0,s),amortizacao:a,juros:j,prestacao:pmt,vencimento:addMeses(dtBase,i*mPer),status:"Pendente"});
+    s = Math.max(0, s-a);
   }
   return tab;
 }
 
-// Roteador central — escolhe a função certa pelo tipo/sistema
+// ── Roteador central ─────────────────────────────────────────────
 function calcTabela(f) {
   const tipo = f.tipo||"";
   const sist = f.sistema||"SAC";
   if(sist==="Parcela Única" || tipo.startsWith("Custeio")) return calcTabelaCusteio(f);
-  if(sist==="PRICE")         return calcTabelaPRICE(f);
-  // SAC — periodicidade padrão por tipo
-  const per = f.periodicidade || (
-    ["Investimento","PRONAF","FCO","Outros"].includes(tipo) ? "anual" : "mensal"
-  );
+  if(sist==="PRICE" || sist==="SAC Semestral") {
+    const fBase = sist==="SAC Semestral" ? {...f, periodicidade:"semestral", sistema:"SAC"} : f;
+    return sist==="PRICE" ? calcTabelaPRICE(fBase) : calcTabelaSAC(fBase);
+  }
+  const per = f.periodicidade || (["Investimento","PRONAF","FCO","Outros"].includes(tipo)?"anual":"mensal");
   return calcTabelaSAC({...f, periodicidade:per});
 }
 function useResponsive(){
@@ -1528,8 +1583,8 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
     else setForm(f=>({...f, tipo:v, sistema:"SAC", periodicidade:"anual"}));
   };
 
-  const getSaldo = f => { const t=calcTabela(f); const p=t.find(p=>!(f.pagamentos||[]).includes(p.parcela)); return p?p.saldo:0; };
-  const getProx  = f => calcTabela(f).find(p=>!(f.pagamentos||[]).includes(p.parcela));
+  const getSaldo = f => { const t=calcTabela(f).filter(p=>p.parcela>0); const p=t.find(p=>!(f.pagamentos||[]).includes(p.parcela)); return p?p.saldo:0; };
+  const getProx  = f => calcTabela(f).filter(p=>p.parcela>0).find(p=>!(f.pagamentos||[]).includes(p.parcela));
 
   const salvar = () => {
     setConfirm({ msg:editItem?"Confirmar alteração?":"Confirmar inclusão?", danger:false, onSim:() => {
@@ -1734,17 +1789,25 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
                 </thead>
                 <tbody>
                   {tabela.map((p,i)=>{
-                    const paga=pagas.includes(p.parcela);
+                    const isCarencia = p.parcela===0;
+                    const paga = !isCarencia && pagas.includes(p.parcela);
                     return(
-                      <tr key={i} style={{background:paga?"#f0faf4":i%2?"#fafafa":"white"}}>
-                        <td style={{...tdS,fontWeight:700}}>{p.parcela}</td>
+                      <tr key={i} style={{background:isCarencia?"#fef9ec":paga?"#f0faf4":i%2?"#fafafa":"white"}}>
+                        <td style={{...tdS,fontWeight:700,color:isCarencia?"#b45309":"inherit"}}>
+                          {isCarencia?"—":p.parcela}
+                        </td>
                         <td style={{...tdS,color:"#6b7280"}}>{p.vencimento}</td>
                         <td style={tdS}>{fmt(p.saldo)}</td>
                         <td style={{...tdS,color:"#2d6a4f"}}>{p.amortizacao>0?fmt(p.amortizacao):"—"}</td>
                         <td style={{...tdS,color:"#e76f51"}}>{fmt(p.juros)}</td>
-                        <td style={{...tdS,fontWeight:700,color:"#1b4332"}}>{fmt(p.prestacao)}</td>
-                        <td style={tdS}><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,background:p.tipo==="Carência"?"#fef3c7":"#f0faf4",color:p.tipo==="Carência"?"#b45309":"#2d6a4f"}}>{p.tipo}</span></td>
-                        <td style={tdS}><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,background:paga?"#d8f3dc":"#fee2e2",color:paga?"#2d6a4f":"#dc2626"}}>{paga?"✅ Pago":"Pendente"}</span></td>
+                        <td style={{...tdS,fontWeight:700,color:isCarencia?"#b45309":"#1b4332"}}>{fmt(p.prestacao)}</td>
+                        <td style={tdS}><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,background:isCarencia?"#fef3c7":p.tipo==="Carência"?"#fef3c7":"#f0faf4",color:isCarencia?"#b45309":p.tipo==="Carência"?"#b45309":"#2d6a4f"}}>{isCarencia?"Carência":p.tipo}</span></td>
+                        <td style={tdS}>
+                          {isCarencia
+                            ? <span style={{fontSize:10,color:"#9ca3af"}}>Informativo</span>
+                            : <span style={{fontSize:10,padding:"1px 6px",borderRadius:6,background:paga?"#d8f3dc":"#fee2e2",color:paga?"#2d6a4f":"#dc2626"}}>{paga?"✅ Pago":"Pendente"}</span>
+                          }
+                        </td>
                       </tr>
                     );
                   })}
@@ -1824,13 +1887,17 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
             {!isCusteio(form.tipo)&&<>
               <Campo label="Nº de Parcelas *" value={form.numParcelas||form.prazo||""} onChange={v=>setForm({...form,numParcelas:v,prazo:v})} type="number" required placeholder="Ex: 8"/>
               <Campo label="Periodicidade *" value={form.periodicidade||"anual"} onChange={v=>setForm({...form,periodicidade:v})} options={["anual","semestral","mensal"]} required/>
-              <Campo label="Carência (meses)" value={form.carencia||""} onChange={v=>setForm({...form,carencia:v})} type="number" placeholder="Ex: 24"/>
+              {/* Carência calculada automaticamente pelas datas */}
+              {form.dtContratacao&&form.dtPrimeiraParcela&&(()=>{
+                const car=diffMeses(form.dtContratacao,form.dtPrimeiraParcela);
+                return car>0?<div style={{gridColumn:"1/-1",padding:"8px 12px",background:"#f0faf4",borderRadius:6,fontSize:12,color:"#2d6a4f"}}>📅 Carência calculada: <strong>{car} meses</strong> (liberação → 1ª parcela)</div>:null;
+              })()}
               <Campo label="Sistema de amortização" value={form.sistema||"SAC"} onChange={v=>setForm({...form,sistema:v})} options={["SAC","SAC Semestral","PRICE","Não informado"]}/>
             </>}
             <Campo label="Garantias" value={form.garantias||""} onChange={v=>setForm({...form,garantias:v})} placeholder="Ex: Penhor da safra, Hipoteca"/>
           </div>
           {form.valor&&form.taxa&&(()=>{
-            const prev=calcTabela({...form,valor:Number(form.valor),taxa:Number(form.taxa),prazo:Number(form.numParcelas||form.prazo)||1,carencia:Number(form.carencia)||0,mesesCusteio:Number(form.mesesCusteio)||12,pagamentos:[]});
+            const prev=calcTabela({...form,valor:Number(form.valor),taxa:Number(form.taxa),numParcelas:Number(form.numParcelas||form.prazo)||1,prazo:Number(form.numParcelas||form.prazo)||1,mesesCusteio:Number(form.mesesCusteio)||12,dtPrimeiraParcela:form.dtPrimeiraParcela,dtContratacao:form.dtContratacao,pagamentos:[]});
             const totalP=prev.reduce((s,p)=>s+p.prestacao,0);
             const totalJ=prev.reduce((s,p)=>s+p.juros,0);
             const desp=(Number(form.iof)||0)+(Number(form.iofAdicional)||0)+(Number(form.tarifaEstudo)||0)+(Number(form.seguroPenhor)||0);
