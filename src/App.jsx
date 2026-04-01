@@ -27,7 +27,8 @@ const toSnake = obj => {
 const CAMPOS_NUMERICOS = new Set([
   "salario","salarioBruto","inss","salFamilia","fgts","baseIrrf","liquido","custoEmpresa",
   "valor","cacauKg","leiteL","cocoUn","qtd","custo","area","capacidade","atual",
-  "numFilhos","precoCacau","precoLeite","precoCoco","precoArroba","taxa","carencia","prazo"
+  "numFilhos","precoCacau","precoLeite","precoCoco","precoArroba","taxa","carencia","prazo",
+  "cetMensal","cetAnual","numParcelas","iof","iofAdicional","tarifaEstudo","seguroPenhor"
 ]);
 const toCamel = obj => {
   if(!obj || typeof obj !== "object") return obj;
@@ -1514,7 +1515,7 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
 
   const abrirAdd  = () => {
     setEditItem(null);
-    setForm({ sistema:"SAC", periodicidade:"anual", carencia:0, status:"Ativo", dtContratacao:hoje(), mesesCusteio:12 });
+    setForm({ sistema:"SAC", periodicidade:"anual", carencia:0, status:"Ativo", dtContratacao:hoje(), mesesCusteio:12, iof:0, iofAdicional:0, tarifaEstudo:0, seguroPenhor:0, cetMensal:0, cetAnual:0 });
     setModal(true);
   };
   const abrirEdit = item => { setEditItem(item); setForm({...item}); setModal(true); };
@@ -1537,6 +1538,10 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
         valor:Number(form.valor)||0, taxa:Number(form.taxa)||0,
         carencia:Number(form.carencia)||0, prazo:Number(form.prazo)||0,
         mesesCusteio:Number(form.mesesCusteio)||12,
+        numParcelas:Number(form.numParcelas)||0,
+        iof:Number(form.iof)||0, iofAdicional:Number(form.iofAdicional)||0,
+        tarifaEstudo:Number(form.tarifaEstudo)||0, seguroPenhor:Number(form.seguroPenhor)||0,
+        cetMensal:Number(form.cetMensal)||0, cetAnual:Number(form.cetAnual)||0,
         pagamentos:editItem?.pagamentos||[]
       };
       if(editItem) dbUpdate("financiamentos", item, setFinanciamentos);
@@ -1614,8 +1619,8 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
                     </div>
                     <div style={{fontSize:13,color:"#374151",marginBottom:2}}>{f.finalidade}</div>
                     <div style={{fontSize:12,color:"#6b7280"}}>
-                      Taxa: {f.taxa}% a.a.
-                      {!isCusteio(f.tipo)&&<> · Prazo: {f.prazo} {f.periodicidade==="anual"?"anos":"meses"}{f.carencia>0?` · Carência: ${f.carencia}m`:""}</>}
+                      {f.numeroContrato&&<><strong>{f.numeroContrato}</strong> · </>}Taxa: {f.taxa}% a.a.{f.cetAnual>0&&<> · CET: {f.cetAnual}% a.a.</>}
+                      {!isCusteio(f.tipo)&&<> · {f.numParcelas||f.prazo} parcelas {f.periodicidade==="anual"?"anuais":"mensais"}{f.carencia>0?` · Carência: ${f.carencia}m`:""}</>}
                       {isCusteio(f.tipo)&&<> · Venc: {f.dtVencimento||"—"} · Prazo: {f.mesesCusteio||12} meses</>}
                       {pagas>0&&<> · {pagas}/{tabela.length} pago(s)</>}
                     </div>
@@ -1682,28 +1687,55 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
       {/* Detalhe do contrato */}
       {detalhe&&(()=>{
         const tabela=calcTabela(detalhe), pagas=detalhe.pagamentos||[], bs=badgeSist(detalhe);
+        const despTotal=(detalhe.iof||0)+(detalhe.iofAdicional||0)+(detalhe.tarifaEstudo||0)+(detalhe.seguroPenhor||0);
         return (
           <Modal title={`📋 ${detalhe.banco} — ${detalhe.finalidade}`} onClose={()=>setDetalhe(null)} largura={760}>
+            {/* Grid de informações do contrato */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
-              {[["Valor",fmt(detalhe.valor)],["Taxa",`${detalhe.taxa}% a.a.`],["Sistema",bs.label],
-                ["Contratação",detalhe.dtContratacao||"—"],["Status",detalhe.status],
-                isCusteio(detalhe.tipo)?["Vencimento",detalhe.dtVencimento||"—"]:["Prazo",`${detalhe.prazo} per.`]
-              ].map(([l,v],i)=>(
+              {[
+                detalhe.numeroContrato?["Contrato",detalhe.numeroContrato]:null,
+                ["Valor Liberado",fmt(detalhe.valor)],
+                ["Taxa Efetiva",`${detalhe.taxa}% a.a.`],
+                detalhe.cetAnual>0?["CET",`${detalhe.cetMensal}% m · ${detalhe.cetAnual}% a.a.`]:null,
+                ["Liberação",detalhe.dtContratacao||"—"],
+                ["Status",detalhe.status],
+                isCusteio(detalhe.tipo)?["Vencimento",detalhe.dtVencimento||"—"]:["Sistema",bs.label],
+                !isCusteio(detalhe.tipo)?["Parcelas",`${detalhe.numParcelas||detalhe.prazo} × ${detalhe.periodicidade}`]:null,
+                detalhe.carencia>0?["Carência",`${detalhe.carencia} meses`]:null,
+              ].filter(Boolean).map(([l,v],i)=>(
                 <div key={i} style={{padding:"8px 12px",background:"#f8faf9",borderRadius:6}}>
                   <div style={{fontSize:10,color:"#6b7280"}}>{l}</div>
                   <div style={{fontSize:13,fontWeight:600,color:"#1a1a2e"}}>{v}</div>
                 </div>
               ))}
             </div>
-            <div style={{maxHeight:380,overflow:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:480}}>
+            {/* Despesas vinculadas */}
+            {despTotal>0&&(
+              <div style={{marginBottom:12,padding:"10px 14px",background:"#fef3c7",borderRadius:8}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#92400e",marginBottom:6}}>Despesas vinculadas à concessão</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:4,fontSize:12}}>
+                  {detalhe.iof>0&&<div><span style={{color:"#6b7280"}}>IOF: </span><strong>{fmt(detalhe.iof)}</strong></div>}
+                  {detalhe.iofAdicional>0&&<div><span style={{color:"#6b7280"}}>IOF Adicional: </span><strong>{fmt(detalhe.iofAdicional)}</strong></div>}
+                  {detalhe.tarifaEstudo>0&&<div><span style={{color:"#6b7280"}}>Tarifa Estudo: </span><strong>{fmt(detalhe.tarifaEstudo)}</strong></div>}
+                  {detalhe.seguroPenhor>0&&<div><span style={{color:"#6b7280"}}>BB Seguro Penhor: </span><strong>{fmt(detalhe.seguroPenhor)}</strong></div>}
+                  <div style={{gridColumn:"1/-1",borderTop:"1px solid #fcd34d",paddingTop:4,display:"flex",justifyContent:"space-between"}}>
+                    <span style={{color:"#b45309",fontWeight:600}}>Valor total devido</span>
+                    <strong style={{color:"#b45309"}}>{fmt((detalhe.valor||0)+despTotal)}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Tabela de amortização */}
+            <div style={{fontSize:11,color:"#6b7280",marginBottom:8}}>{detalhe.finalidade} · {bs.label} · {detalhe.taxa}% a.a.</div>
+            <div style={{maxHeight:320,overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:500}}>
                 <thead style={{position:"sticky",top:0}}>
                   <tr>{["Parc.","Vencimento","Saldo","Amort.","Juros","Total","Tipo","Status"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {tabela.map((p,i)=>{
                     const paga=pagas.includes(p.parcela);
-                    return (
+                    return(
                       <tr key={i} style={{background:paga?"#f0faf4":i%2?"#fafafa":"white"}}>
                         <td style={{...tdS,fontWeight:700}}>{p.parcela}</td>
                         <td style={{...tdS,color:"#6b7280"}}>{p.vencimento}</td>
@@ -1726,7 +1758,7 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
         );
       })()}
 
-      {/* Modal pagamento */}
+            {/* Modal pagamento */}
       {pgModal&&(
         <Modal title="💳 Registrar Pagamento" onClose={()=>setPgModal(null)} largura={420}>
           <div style={{marginBottom:16,padding:14,background:"#f8faf9",borderRadius:8}}>
@@ -1748,48 +1780,69 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
 
       {/* Modal cadastro/edição */}
       {modal&&(
-        <Modal title={editItem?"Editar Financiamento":"Novo Financiamento"} onClose={fechar} largura={660}>
+        <Modal title={editItem?"Editar Financiamento":"Novo Financiamento"} onClose={fechar} largura={720}>
+          <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Identificação</div>
           <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:0}}>
-            {/* Banco e tipo sempre */}
             <Campo label="Banco *" value={form.banco||""} onChange={v=>setForm({...form,banco:v})} options={["Banco do Brasil","BNB – Nordeste","Caixa Econômica","Sicoob","Sicredi","Bradesco","Outros"]} required/>
+            <Campo label="Nº do Contrato" value={form.numeroContrato||""} onChange={v=>setForm({...form,numeroContrato:v})} placeholder="Ex: 12345678-9"/>
             <Campo label="Tipo *" value={form.tipo||""} onChange={setTipo} options={TIPO_FINANC} required/>
-            <div style={{gridColumn:"1/-1"}}><Campo label="Finalidade *" value={form.finalidade||""} onChange={v=>setForm({...form,finalidade:v})} required placeholder="Ex: Custeio safra cacau 2025/26"/></div>
-            <Campo label="Valor financiado (R$) *" value={form.valor||""} onChange={v=>setForm({...form,valor:v})} type="number" required/>
-            <Campo label="Taxa de juros (% a.a.) *" value={form.taxa||""} onChange={v=>setForm({...form,taxa:v})} type="number" required placeholder="Ex: 7.5"/>
-            <Campo label="Data de contratação *" value={form.dtContratacao||""} onChange={v=>setForm({...form,dtContratacao:v})} type="date" required/>
-
-            {/* Campos específicos para CUSTEIO */}
-            {isCusteio(form.tipo)&&<>
-              <Campo label="Data de vencimento *" value={form.dtVencimento||""} onChange={v=>setForm({...form,dtVencimento:v})} type="date" required/>
-              <Campo label="Prazo (meses)" value={form.mesesCusteio||""} onChange={v=>setForm({...form,mesesCusteio:v})} type="number" placeholder="Ex: 12"/>
-            </>}
-
-            {/* Campos específicos para INVESTIMENTO */}
-            {!isCusteio(form.tipo)&&<>
-              <Campo label="Periodicidade das parcelas *" value={form.periodicidade||"anual"} onChange={v=>setForm({...form,periodicidade:v})} options={["anual","semestral","mensal"]} required/>
-              <Campo label={`Prazo (${form.periodicidade==="anual"?"anos":form.periodicidade==="semestral"?"semestres":"meses"}) *`} value={form.prazo||""} onChange={v=>setForm({...form,prazo:v})} type="number" required placeholder={form.periodicidade==="anual"?"Ex: 8":"Ex: 60"}/>
-              <Campo label="Carência (meses)" value={form.carencia||""} onChange={v=>setForm({...form,carencia:v})} type="number" placeholder="Ex: 24"/>
-              <Campo label="Sistema de amortização *" value={form.sistema||"SAC"} onChange={v=>setForm({...form,sistema:v})} options={["SAC","SAC Semestral","PRICE"]} required/>
-            </>}
-
-            <Campo label="Garantias" value={form.garantias||""} onChange={v=>setForm({...form,garantias:v})} placeholder="Ex: Penhor da safra, Hipoteca"/>
             <Campo label="Status" value={form.status||"Ativo"} onChange={v=>setForm({...form,status:v})} options={["Ativo","Quitado","Renegociado"]}/>
+            <div style={{gridColumn:"1/-1"}}><Campo label="Finalidade *" value={form.finalidade||""} onChange={v=>setForm({...form,finalidade:v})} required placeholder="Ex: Investimento agropecuário tradicional"/></div>
           </div>
-
-          {/* Preview rápido */}
+          <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6,marginTop:8}}>Valores e CET</div>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:0}}>
+            <Campo label="Valor Liberado (R$) *" value={form.valor||""} onChange={v=>setForm({...form,valor:v})} type="number" required placeholder="Ex: 163000"/>
+            <Campo label="Taxa de Juros Efetiva (% a.a.) *" value={form.taxa||""} onChange={v=>setForm({...form,taxa:v})} type="number" required placeholder="Ex: 7.5"/>
+            <Campo label="CET Mensal (%)" value={form.cetMensal||""} onChange={v=>setForm({...form,cetMensal:v})} type="number" placeholder="Ex: 0.65"/>
+            <Campo label="CET Anual (%)" value={form.cetAnual||""} onChange={v=>setForm({...form,cetAnual:v})} type="number" placeholder="Ex: 8.1"/>
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6,marginTop:8}}>Despesas vinculadas à concessão de crédito</div>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:0}}>
+            <Campo label="IOF (R$)" value={form.iof||""} onChange={v=>setForm({...form,iof:v})} type="number" placeholder="0,00"/>
+            <Campo label="IOF Adicional (R$)" value={form.iofAdicional||""} onChange={v=>setForm({...form,iofAdicional:v})} type="number" placeholder="0,00"/>
+            <Campo label="Tarifa de Estudo da Operação (R$)" value={form.tarifaEstudo||""} onChange={v=>setForm({...form,tarifaEstudo:v})} type="number" placeholder="0,00"/>
+            <Campo label="BB Seguro Penhor Rural (R$)" value={form.seguroPenhor||""} onChange={v=>setForm({...form,seguroPenhor:v})} type="number" placeholder="0,00"/>
+          </div>
+          {Number(form.valor)>0&&(
+            <div style={{padding:"8px 14px",background:"#fef3c7",borderRadius:8,marginBottom:4,fontSize:12,display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"#92400e"}}>Valor total devido = liberado + despesas</span>
+              <strong style={{color:"#b45309"}}>{fmt((Number(form.valor)||0)+(Number(form.iof)||0)+(Number(form.iofAdicional)||0)+(Number(form.tarifaEstudo)||0)+(Number(form.seguroPenhor)||0))}</strong>
+            </div>
+          )}
+          <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6,marginTop:8}}>Datas</div>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,1fr)",gap:0}}>
+            <Campo label="Data de Liberação *" value={form.dtContratacao||""} onChange={v=>setForm({...form,dtContratacao:v})} type="date" required/>
+            <Campo label="Data de Cálculo (CET)" value={form.dataCalculo||""} onChange={v=>setForm({...form,dataCalculo:v})} type="date"/>
+            {isCusteio(form.tipo)&&<Campo label="Data de Vencimento *" value={form.dtVencimento||""} onChange={v=>setForm({...form,dtVencimento:v})} type="date" required/>}
+            {!isCusteio(form.tipo)&&<Campo label="Data 1ª Parcela" value={form.dtPrimeiraParcela||""} onChange={v=>setForm({...form,dtPrimeiraParcela:v})} type="date"/>}
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:6,marginTop:8}}>
+            {isCusteio(form.tipo)?"Custeio":"Reposição de Capital"}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:0}}>
+            {isCusteio(form.tipo)&&<Campo label="Prazo (meses)" value={form.mesesCusteio||""} onChange={v=>setForm({...form,mesesCusteio:v})} type="number" placeholder="Ex: 12"/>}
+            {!isCusteio(form.tipo)&&<>
+              <Campo label="Nº de Parcelas *" value={form.numParcelas||form.prazo||""} onChange={v=>setForm({...form,numParcelas:v,prazo:v})} type="number" required placeholder="Ex: 8"/>
+              <Campo label="Periodicidade *" value={form.periodicidade||"anual"} onChange={v=>setForm({...form,periodicidade:v})} options={["anual","semestral","mensal"]} required/>
+              <Campo label="Carência (meses)" value={form.carencia||""} onChange={v=>setForm({...form,carencia:v})} type="number" placeholder="Ex: 24"/>
+              <Campo label="Sistema de amortização" value={form.sistema||"SAC"} onChange={v=>setForm({...form,sistema:v})} options={["SAC","SAC Semestral","PRICE","Não informado"]}/>
+            </>}
+            <Campo label="Garantias" value={form.garantias||""} onChange={v=>setForm({...form,garantias:v})} placeholder="Ex: Penhor da safra, Hipoteca"/>
+          </div>
           {form.valor&&form.taxa&&(()=>{
-            const prev=calcTabela({...form,valor:Number(form.valor),taxa:Number(form.taxa),prazo:Number(form.prazo)||1,carencia:Number(form.carencia)||0,mesesCusteio:Number(form.mesesCusteio)||12,pagamentos:[]});
-            const total=prev.reduce((s,p)=>s+p.prestacao,0);
+            const prev=calcTabela({...form,valor:Number(form.valor),taxa:Number(form.taxa),prazo:Number(form.numParcelas||form.prazo)||1,carencia:Number(form.carencia)||0,mesesCusteio:Number(form.mesesCusteio)||12,pagamentos:[]});
+            const totalP=prev.reduce((s,p)=>s+p.prestacao,0);
             const totalJ=prev.reduce((s,p)=>s+p.juros,0);
-            return (
-              <div style={{marginTop:4,padding:"10px 14px",background:"#f0faf4",borderRadius:8,fontSize:12,color:"#1b4332",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+            const desp=(Number(form.iof)||0)+(Number(form.iofAdicional)||0)+(Number(form.tarifaEstudo)||0)+(Number(form.seguroPenhor)||0);
+            return(
+              <div style={{marginTop:4,padding:"10px 14px",background:"#f0faf4",borderRadius:8,fontSize:12,color:"#1b4332",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
                 <div><div style={{color:"#6b7280",fontSize:11}}>Nº parcelas</div><strong>{prev.length}</strong></div>
                 <div><div style={{color:"#6b7280",fontSize:11}}>Total juros</div><strong>{fmt(totalJ)}</strong></div>
-                <div><div style={{color:"#6b7280",fontSize:11}}>Total a pagar</div><strong>{fmt(total)}</strong></div>
+                <div><div style={{color:"#6b7280",fontSize:11}}>Total prestações</div><strong>{fmt(totalP)}</strong></div>
+                <div><div style={{color:"#6b7280",fontSize:11}}>Custo total c/ despesas</div><strong>{fmt(totalP+desp)}</strong></div>
               </div>
             );
           })()}
-
           <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:12}}>
             <button onClick={fechar} style={{padding:"9px 16px",background:"#f3f4f6",color:"#374151",border:"1px solid #e5e7eb",borderRadius:8,cursor:"pointer",fontSize:13}}>Cancelar</button>
             <button onClick={salvar} style={{padding:"9px 18px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13}}>💾 Salvar</button>
@@ -2594,7 +2647,7 @@ export default function App() {
     animais_corte:    ["id","brinco","categoria","peso_prev","peso_atual","dt_entrada","previsao_abate","pasto","status","custo_aquisicao"],
     vacinas:          ["id","data","rebanho","lote","vacina","qtd","custo","status"],
     pastagens:        ["id","nome","area","capacidade","atual","tipo","status","capim","dt_plantio","obs"],
-    financiamentos:   ["id","banco","tipo","finalidade","valor","taxa","carencia","prazo","dt_contratacao","dt_vencimento","sistema","periodicidade","meses_custeio","garantias","status","pagamentos"],
+    financiamentos:   ["id","banco","tipo","finalidade","valor","taxa","carencia","prazo","dt_contratacao","dt_vencimento","sistema","periodicidade","meses_custeio","numero_contrato","data_liberacao","data_calculo","cet_mensal","cet_anual","dt_primeira_parcela","dt_ultima_parcela","num_parcelas","iof","iof_adicional","tarifa_estudo","seguro_penhor","garantias","status","pagamentos"],
     folhas:           ["id","mes","ano","tipo","status"],
     folha_itens:      ["id","folha_id","funcionario_id","funcionario_nome","salario_bruto","inss","sal_familia","fgts","base_irrf","liquido","custo_empresa"],
     config_fazenda:   ["id","nome_fazenda","preco_cacau","preco_leite","preco_coco","preco_arroba","atualizado_em"],
