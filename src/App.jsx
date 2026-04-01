@@ -258,14 +258,7 @@ const PASTAGENS_INIT = []; // dados carregados do Supabase
 
 
 const FINANCIAMENTOS_INIT = []; // dados carregados do Supabase
-const VENDAS_GADO_HIST = [
-  { mes:"Out", cabecas:4, arrobas:240, valorArroba:310, total:74400  },
-  { mes:"Nov", cabecas:3, arrobas:178, valorArroba:315, total:56070  },
-  { mes:"Dez", cabecas:6, arrobas:372, valorArroba:320, total:119040 },
-  { mes:"Jan", cabecas:5, arrobas:305, valorArroba:318, total:96990  },
-  { mes:"Fev", cabecas:4, arrobas:244, valorArroba:322, total:78568  },
-  { mes:"Mar", cabecas:7, arrobas:434, valorArroba:325, total:141050 },
-];
+// Histórico de gado: calculado dinamicamente das receitas reais
 
 // ── COMPONENTES BASE ──────────────────────────────────────
 function Modal({ title, children, onClose, largura=500 }) {
@@ -389,10 +382,10 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
     mes: p.mes, Cacau:p.cacauKg*PC, Leite:p.leiteL*PL, Coco:p.cocoUn*PCO,
   }));
 
-  const cstCacau=despesas.filter(d=>d.categoria==="Insumos Agrícolas").reduce((s,d)=>s+d.valor,0)+2000;
-  const cstLeite=despesas.filter(d=>d.categoria==="🥛 Gado Leiteiro").reduce((s,d)=>s+d.valor,0)+2400;
-  const cstCoco =1800;
-  const cstGado =despesas.filter(d=>d.categoria==="🐂 Gado de Corte").reduce((s,d)=>s+d.valor,0);
+  const cstCacau=despesas.filter(d=>["Insumos Agrícolas","Cacau"].some(c=>d.categoria?.includes(c))).reduce((s,d)=>s+(d.valor||0),0);
+  const cstLeite=despesas.filter(d=>d.categoria?.includes("Leiteiro")||d.categoria?.includes("🥛")).reduce((s,d)=>s+(d.valor||0),0);
+  const cstCoco =despesas.filter(d=>d.categoria?.includes("Coco")||d.subcategoria?.includes("Coco")).reduce((s,d)=>s+(d.valor||0),0);
+  const cstGado =despesas.filter(d=>d.categoria?.includes("Gado de Corte")||d.categoria?.includes("🐂")).reduce((s,d)=>s+(d.valor||0),0);
 
   const comp = [
     { ativ:"Cacau",      receita:recCacau, custo:cstCacau, lucro:recCacau-cstCacau, cor:"#d4a017", icon:"🍫" },
@@ -544,7 +537,7 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
             <Card>
               <CardTitle>Receita × Custo × Lucro — Gado Corte histórico</CardTitle>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={VENDAS_GADO_HIST}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/><XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/><Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+                <BarChart data={recGadoHist}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/><XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis tick={{fontSize:10}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/><Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
                   <Bar dataKey="total" name="Receita" fill="#457b9d" radius={[3,3,0,0]}/>
                 </BarChart>
               </ResponsiveContainer>
@@ -552,7 +545,7 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
             <Card>
               <CardTitle>Arrobas vendidas</CardTitle>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={VENDAS_GADO_HIST}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}}/><Tooltip/><Bar dataKey="arrobas" name="@" fill="#d4a017" radius={[3,3,0,0]}/></BarChart>
+                <BarChart data={recGadoHist}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}}/><Tooltip formatter={v=>fmt(v)}/><Bar dataKey="total" name="Receita" fill="#d4a017" radius={[3,3,0,0]}/></BarChart>
               </ResponsiveContainer>
             </Card>
           </div>
@@ -691,8 +684,19 @@ function ProducaoView({ producao }) {
   const prv = [...producao].sort((a,b)=>b.data.localeCompare(a.data))[1]||{};
   const hist6 = producao.slice(-6);
 
-  const vendGado = VENDAS_GADO_HIST[VENDAS_GADO_HIST.length-1];
-  const prevGado = VENDAS_GADO_HIST[VENDAS_GADO_HIST.length-2];
+  // Histórico de gado a partir das receitas reais
+  const recGadoHist = [...receitas]
+    .filter(r=>r.atividade==="Gado Corte")
+    .sort((a,b)=>(a.data||"").localeCompare(b.data||""))
+    .reduce((acc,r)=>{
+      const mes = r.data?new Date(r.data+"T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}):"—";
+      const idx = acc.findIndex(x=>x.mes===mes);
+      if(idx>=0) acc[idx].total+=r.valor||0;
+      else acc.push({mes, total:r.valor||0, cabecas:0, arrobas:0});
+      return acc;
+    },[]);
+  const vendGado = recGadoHist.length>0 ? recGadoHist[recGadoHist.length-1] : {cabecas:0,arrobas:0,total:0,mes:"—"};
+  const prevGado = recGadoHist.length>1 ? recGadoHist[recGadoHist.length-2] : {total:0};
 
   return (
     <div>
@@ -701,7 +705,7 @@ function ProducaoView({ producao }) {
         <KpiCard label="🍫 Cacau" value={`${fmtN(cur.cacauKg)} kg`} sub={`${(cur.cacauKg||0)-(prv.cacauKg||0)>0?"+":""}${(cur.cacauKg||0)-(prv.cacauKg||0)} kg`} color="#d4a017" icon="🍫" trend={(cur.cacauKg||0)-(prv.cacauKg||0)}/>
         <KpiCard label="🥛 Leite" value={`${fmtN(cur.leiteL)} L`}   sub={`${(cur.leiteL||0)-(prv.leiteL||0)>0?"+":""}${(cur.leiteL||0)-(prv.leiteL||0)} L`}   color="#2d6a4f" icon="🥛" trend={(cur.leiteL||0)-(prv.leiteL||0)}/>
         <KpiCard label="🥥 Coco"  value={`${fmtN(cur.cocoUn)} un`}  sub={`${(cur.cocoUn||0)-(prv.cocoUn||0)>0?"+":""}${(cur.cocoUn||0)-(prv.cocoUn||0)} un`}  color="#52b788" icon="🥥" trend={(cur.cocoUn||0)-(prv.cocoUn||0)}/>
-        <KpiCard label="🐂 Gado"  value={`${vendGado.cabecas} cab.`} sub={`${vendGado.arrobas} arrobas · ${fmt(vendGado.total)}`} color="#457b9d" icon="🐂" trend={vendGado.total-prevGado.total}/>
+        <KpiCard label="🐂 Gado Corte" value={fmt(vendGado.total)} sub={vendGado.mes!=="—"?`Último: ${vendGado.mes}`:"Sem vendas"} color="#457b9d" icon="🐂" trend={vendGado.total-prevGado.total}/>
       </div>
       <TabBar tabs={[{id:"geral",label:"Visão Geral"},{id:"cacau",label:"🍫 Cacau"},{id:"leite",label:"🥛 Leite"},{id:"coco",label:"🥥 Coco"},{id:"gado",label:"🐂 Gado Corte"}]} active={tab} onChange={setTab}/>
 
@@ -721,7 +725,7 @@ function ProducaoView({ producao }) {
           <Card>
             <CardTitle>🐂 Gado Corte — arrobas e receita</CardTitle>
             <ResponsiveContainer width="100%" height={150}>
-              <BarChart data={VENDAS_GADO_HIST}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}}/><Tooltip formatter={(v,n)=>n==="Receita"?fmt(v):v}/><Legend wrapperStyle={{fontSize:10}}/>
+              <BarChart data={recGadoHist}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}}/><Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:10}}/>
                 <Bar dataKey="arrobas" name="Arrobas" fill="#457b9d" radius={[3,3,0,0]}/>
                 <Bar dataKey="cabecas" name="Cabeças" fill="#1b4332" radius={[3,3,0,0]}/>
               </BarChart>
@@ -810,19 +814,20 @@ function ProducaoView({ producao }) {
           <Card>
             <CardTitle>Vendas de Gado — histórico</CardTitle>
             <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
-              <thead><tr>{["Mês","Cabeças","Arrobas","R$/@","Total"].map((h,i)=><th key={i} style={{ padding:"7px 10px",textAlign:"left",color:"#6b7280",borderBottom:"1px solid #e5e7eb",fontWeight:600 }}>{h}</th>)}</tr></thead>
-              <tbody>{VENDAS_GADO_HIST.map((v,i)=>(
+              <thead><tr>
+                  <th style={{ padding:"8px 10px",background:"#1b4332",color:"white",fontSize:12 }}>Mês</th>
+                  <th style={{ padding:"8px 10px",background:"#1b4332",color:"white",fontSize:12 }}>Receita</th>
+                </tr></thead>
+              <tbody>{recGadoHist.length>0 ? recGadoHist.map((v,i)=>(
                 <tr key={i} style={{ background:i%2?"#fafafa":"white" }}>
                   <td style={{ padding:"8px 10px",fontWeight:600 }}>{v.mes}</td>
-                  <td style={{ padding:"8px 10px" }}>{v.cabecas} cab.</td>
-                  <td style={{ padding:"8px 10px" }}>{v.arrobas} @</td>
-                  <td style={{ padding:"8px 10px",color:"#d4a017",fontWeight:600 }}>{fmt(v.valorArroba)}</td>
-                  <td style={{ padding:"8px 10px",fontWeight:700,color:"#1b4332" }}>{fmt(v.total)}</td>
+                  <td style={{ padding:"8px 10px",color:"#d4a017",fontWeight:600 }}>{fmt(v.total)}</td>
                 </tr>
-              ))}</tbody>
+              )) : <tr><td colSpan={2} style={{padding:"12px",color:"#9ca3af",textAlign:"center"}}>Nenhuma venda de gado lançada</td></tr>}
+            </tbody>
               <tfoot><tr style={{ background:"#1b4332" }}>
                 <td colSpan={4} style={{ padding:"8px 10px",color:"#95d5b2",fontWeight:700 }}>Total 6 meses</td>
-                <td style={{ padding:"8px 10px",color:"white",fontWeight:800 }}>{fmt(VENDAS_GADO_HIST.reduce((s,v)=>s+v.total,0))}</td>
+                <td style={{ padding:"8px 10px",color:"white",fontWeight:800 }}>{fmt(recGadoHist.reduce((s,v)=>s+(v.total||0),0))}</td>
               </tr></tfoot>
             </table>
           </Card>
