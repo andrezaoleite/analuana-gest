@@ -1395,7 +1395,7 @@ function LancamentosView({ producao, setProducao, despesas, setDespesas, receita
 }
 
 // ── GESTÃO DE USUÁRIOS ────────────────────────────────────
-function UsuariosView({ usuarios, setUsuarios }) {
+function UsuariosView({ usuarios, setUsuarios, dbAdd, dbUpdate, dbDelete }) {
   const [modal, setModal]   = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm]     = useState({});
@@ -1407,12 +1407,16 @@ function UsuariosView({ usuarios, setUsuarios }) {
   const fechar    = () => { setModal(false); setEditItem(null); setForm({}); };
 
   const salvar = () => {
+    if(!form.nome||!form.usuario) return;
     setConfirm({
       msg: editItem ? `Confirmar alterações no usuário "${form.nome}"?` : `Confirmar criação do usuário "${form.nome}"?`,
       danger: false,
       onSim: () => {
-        const item = { ...form, id: editItem?.id || uid() };
-        setUsuarios(prev => editItem ? prev.map(x=>x.id===item.id?item:x) : [...prev,item]);
+        const item = { ...form, id: editItem?.id || uid(),
+          // senha_hash: por enquanto salva em texto; futura versão usa SHA-256
+          senhaHash: form.senhaHash || form.senha || "" };
+        if(editItem) dbUpdate("usuarios", item, setUsuarios);
+        else         dbAdd("usuarios",    item, setUsuarios);
         fechar(); setConfirm(null);
       }
     });
@@ -1422,7 +1426,7 @@ function UsuariosView({ usuarios, setUsuarios }) {
     setConfirm({
       msg: `Excluir o usuário "${nome}"? Ele perderá o acesso imediatamente.`,
       danger: true,
-      onSim: () => { setUsuarios(prev => prev.filter(x=>x.id!==id)); setConfirm(null); }
+      onSim: () => { dbDelete("usuarios", id, setUsuarios); setConfirm(null); }
     });
   };
 
@@ -1459,7 +1463,7 @@ function UsuariosView({ usuarios, setUsuarios }) {
                 <td style={{...tdS,fontFamily:"monospace",color:"#374151"}}>{u.usuario}</td>
                 <td style={tdS}>
                   <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                    <span style={{ fontFamily:"monospace",fontSize:12 }}>{showSenhas[u.id]?u.senha:"••••••••"}</span>
+                    <span style={{ fontFamily:"monospace",fontSize:12 }}>{showSenhas[u.id]?(u.senhaHash||u.senha||"—"):"••••••••"}</span>
                     <button onClick={()=>setShowSenhas(s=>({...s,[u.id]:!s[u.id]}))} style={{ background:"none",border:"none",cursor:"pointer",fontSize:13,color:"#9ca3af" }}>{showSenhas[u.id]?"🙈":"👁"}</button>
                   </div>
                 </td>
@@ -1494,7 +1498,7 @@ function UsuariosView({ usuarios, setUsuarios }) {
         <Modal title={editItem?"Editar Usuário":"Novo Usuário"} onClose={fechar} largura={480}>
           {F("Nome completo *","nome","text",true)}
           {F("Usuário (login) *","usuario","text",true)}
-          {F("Senha *","senha","text",true)}
+          {!editItem&&F("Senha *","senhaHash","password",true)}{editItem&&<Campo label="Nova Senha (deixe em branco para não alterar)" value={form.senhaHash||""} onChange={v=>setForm({...form,senhaHash:v})} type="password"/>}
           {F("Perfil de Acesso *","perfil","text",true,NIVEIS)}
           <div style={{ marginBottom:14 }}>
             <label style={{ display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13 }}>
@@ -1520,7 +1524,8 @@ function LoginView({ onLogin, usuarios, nomeFazenda }) {
   const [show, setShow]       = useState(false);
 
   const handleLogin = () => {
-    const user = usuarios.find(u => u.usuario===usuario.trim() && u.senha===senha && u.ativo!==false);
+    const senhaInput = senha;
+    const user = usuarios.find(u => u.usuario===usuario.trim() && (u.senhaHash===senhaInput || u.senha===senhaInput) && u.ativo!==false);
     if(user) { setErro(""); onLogin(user); }
     else setErro("Usuário, senha inválidos ou conta inativa.");
   };
@@ -2778,7 +2783,7 @@ export default function App() {
 
     const carregar = async () => {
       // Queries individuais — falha de uma não afeta as outras
-      const [cfg,func,prod,desp,rec,animL,animC,vac,past,fin,fol] = await Promise.all([
+      const [cfg,func,prod,desp,rec,animL,animC,vac,past,fin,fol,usrs] = await Promise.all([
         sb("config_fazenda",  supabase.from("config_fazenda").select("*").eq("id","principal").maybeSingle()),
         sb("funcionarios",    supabase.from("funcionarios").select("*").order("nome")),
         sb("producao",        supabase.from("producao").select("*").order("data",{ascending:false})),
@@ -2790,6 +2795,7 @@ export default function App() {
         sb("pastagens",       supabase.from("pastagens").select("*").order("nome")),
         sb("financiamentos",  supabase.from("financiamentos").select("*").order("criado_em")),
         sb("folhas",          supabase.from("folhas").select("*, folha_itens(*)").order("ano",{ascending:false}).order("mes",{ascending:false})),
+        sb("usuarios",        supabase.from("usuarios").select("*").order("nome")),
       ]);
 
       if(cfg?.data)         setConfig(c=>({...c,...toCamel(cfg.data)}));
@@ -2803,6 +2809,7 @@ export default function App() {
       if(past?.data?.length)  setPastagens(past.data.map(toCamel));
       if(fin?.data?.length)   setFinanciamentos(fin.data.map(toCamel));
       if(fol?.data?.length)   setFolhas(fol.data.map(f=>({...toCamel(f),itens:(f.folha_itens||[]).map(toCamel)})));
+      if(usrs?.data?.length)  setUsuarios(usrs.data.map(toCamel));
 
       setDbCarregado(true);
     };
@@ -2824,6 +2831,7 @@ export default function App() {
     folhas:           ["id","mes","ano","tipo","status"],
     folha_itens:      ["id","folha_id","funcionario_id","funcionario_nome","salario_bruto","inss","sal_familia","fgts","base_irrf","liquido","custo_empresa"],
     config_fazenda:   ["id","nome_fazenda","preco_cacau","preco_leite","preco_coco","preco_arroba","atualizado_em"],
+    usuarios:         ["id","nome","usuario","senha_hash","perfil","ativo"],
   };
   const filtrar = (table, row) => {
     const cols = COLS[table];
@@ -2939,7 +2947,7 @@ export default function App() {
           {menu==="pastagens"      && <PastagensView pastagens={pastagens} setPastagens={setPastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="financiamentos" && <FinanciamentosView financiamentos={financiamentos} setFinanciamentos={setFinanciamentos} setDespesas={setDespesas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="lancamentos"    && <LancamentosView producao={producao} setProducao={setProducao} despesas={despesas} setDespesas={setDespesas} receitas={receitas} setReceitas={setReceitas} funcionarios={funcionarios} setFuncionarios={setFuncionarios} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
-          {menu==="usuarios"       && <UsuariosView usuarios={usuarios} setUsuarios={setUsuarios}/>}
+          {menu==="usuarios"       && <UsuariosView usuarios={usuarios} setUsuarios={setUsuarios} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="configuracoes"  && <ConfiguracoesView config={config} setConfig={dbSaveConfig}/>}
           {menu==="relatorio"      && <RelatorioView producao={producao} despesas={despesas} receitas={receitas} folhas={folhas} financiamentos={financiamentos} config={config} precos={precos}/>}
         </div>
