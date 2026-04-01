@@ -82,7 +82,16 @@ const temAcesso = (perfil, modulo) => {
 
 
 const fmtData = dataStr => { if(!dataStr) return "—"; const [y,m,d] = dataStr.split("-"); return d?`${d}/${m}/${y}`:dataStr; };
-const addMeses = (dataStr, n) => { if(!dataStr) return "—"; const d=new Date(dataStr+"T12:00:00"); d.setMonth(d.getMonth()+n); return d.toISOString().slice(0,7); };
+const addMeses = (dataStr, n) => {
+  if(!dataStr || dataStr === "—") return "—";
+  // Normalizar: aceita "YYYY-MM" ou "YYYY-MM-DD" — sempre usar primeiro dia do mês
+  const base = dataStr.length >= 10 ? dataStr.slice(0,10) : dataStr.slice(0,7) + "-01";
+  const d = new Date(base + "T12:00:00");
+  if(isNaN(d.getTime())) return "—";
+  d.setMonth(d.getMonth() + n);
+  if(isNaN(d.getTime())) return "—";
+  return d.toISOString().slice(0,7);
+};
 // Adiciona N períodos (meses, semestres ou anos) a uma data
 // ── Helpers de data ──────────────────────────────────────────────────
 // Adiciona mPer meses a uma string "YYYY-MM"
@@ -94,9 +103,11 @@ function addPeriodos(dtBase, n, periodicidade) {
 
 // Diferença em meses entre duas datas "YYYY-MM" ou "YYYY-MM-DD"
 function diffMeses(dtA, dtB) {
-  if(!dtA||!dtB) return 0;
+  if(!dtA||!dtB||dtA==="—"||dtB==="—") return 0;
+  if(dtA.length < 7 || dtB.length < 7) return 0;
   const a = new Date(dtA.slice(0,7)+"-01T12:00:00");
   const b = new Date(dtB.slice(0,7)+"-01T12:00:00");
+  if(isNaN(a.getTime())||isNaN(b.getTime())) return 0;
   return (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth());
 }
 
@@ -133,7 +144,8 @@ function calcTabelaSAC(f) {
     ? Math.max(0, diffMeses(f.dtContratacao, f.dtPrimeiraParcela))
     : (Number(f.carencia)||0);
   // Base para calcular datas: dt_primeira_parcela ou derivada
-  const dtBase = f.dtPrimeiraParcela || addMeses(f.dtContratacao, carenciaMeses||mPer);
+  const dtBaseTmp = f.dtPrimeiraParcela || addMeses(f.dtContratacao, carenciaMeses||mPer);
+  const dtBase = (dtBaseTmp && dtBaseTmp !== "—") ? dtBaseTmp : null;
 
   const tab = [];
   // Linha de carência informativa (sem parcela de amortização)
@@ -144,7 +156,7 @@ function calcTabelaSAC(f) {
       parcela:0, tipo:"Carência",
       saldo:f.valor||0, amortizacao:0,
       juros:jurosCarencia, prestacao:jurosCarencia,
-      vencimento:dtBase, status:"Pendente",
+      vencimento:dtBase||"—", status:"Pendente",
       isCarencia:true
     });
   }
@@ -153,7 +165,7 @@ function calcTabelaSAC(f) {
   for(let i=0; i<n; i++) {
     const j = s * tPer;
     const p = am + j;
-    const venc = addMeses(dtBase, i * mPer);
+    const venc = dtBase ? addMeses(dtBase, i * mPer) : "—";
     tab.push({
       parcela:i+1, tipo:"Normal",
       saldo:Math.max(0,s), amortizacao:am, juros:j, prestacao:p,
@@ -174,7 +186,8 @@ function calcTabelaPRICE(f) {
   const carenciaMeses = (f.dtContratacao && f.dtPrimeiraParcela)
     ? Math.max(0, diffMeses(f.dtContratacao, f.dtPrimeiraParcela))
     : (Number(f.carencia)||0);
-  const dtBase = f.dtPrimeiraParcela || addMeses(f.dtContratacao, carenciaMeses||mPer);
+  const dtBaseTmp = f.dtPrimeiraParcela || addMeses(f.dtContratacao, carenciaMeses||mPer);
+  const dtBase = (dtBaseTmp && dtBaseTmp !== "—") ? dtBaseTmp : null;
 
   const tab = [];
   if(carenciaMeses > 0) {
@@ -186,7 +199,7 @@ function calcTabelaPRICE(f) {
   for(let i=0; i<n; i++) {
     const j = s*tPer;
     const a = Math.max(0, pmt-j);
-    tab.push({parcela:i+1,tipo:"Normal",saldo:Math.max(0,s),amortizacao:a,juros:j,prestacao:pmt,vencimento:addMeses(dtBase,i*mPer),status:"Pendente"});
+    tab.push({parcela:i+1,tipo:"Normal",saldo:Math.max(0,s),amortizacao:a,juros:j,prestacao:pmt,vencimento:dtBase?addMeses(dtBase,i*mPer):"—",status:"Pendente"});
     s = Math.max(0, s-a);
   }
   return tab;
@@ -1896,7 +1909,7 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
             </>}
             <Campo label="Garantias" value={form.garantias||""} onChange={v=>setForm({...form,garantias:v})} placeholder="Ex: Penhor da safra, Hipoteca"/>
           </div>
-          {form.valor&&form.taxa&&(()=>{
+          {form.valor&&form.taxa&&(form.dtContratacao||'').length>=10&&(()=>{
             const prev=calcTabela({...form,valor:Number(form.valor),taxa:Number(form.taxa),numParcelas:Number(form.numParcelas||form.prazo)||1,prazo:Number(form.numParcelas||form.prazo)||1,mesesCusteio:Number(form.mesesCusteio)||12,dtPrimeiraParcela:form.dtPrimeiraParcela,dtContratacao:form.dtContratacao,pagamentos:[]});
             const totalP=prev.reduce((s,p)=>s+p.prestacao,0);
             const totalJ=prev.reduce((s,p)=>s+p.juros,0);
