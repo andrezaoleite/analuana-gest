@@ -1719,7 +1719,7 @@ function FinanciamentosView({ financiamentos, setFinanciamentos, setDespesas, db
           <Card>
             <CardTitle>Saldo por Contrato</CardTitle>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={ativos.map(f=>({name:f.banco.slice(0,12),saldo:Math.round(getSaldo(f))}))}>
+              <BarChart data={ativos.map(f=>({name:(f.banco||"").slice(0,12),saldo:Math.round(getSaldo(f))}))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
                 <XAxis dataKey="name" tick={{fontSize:10}}/>
                 <YAxis tick={{fontSize:9}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
