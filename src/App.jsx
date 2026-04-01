@@ -387,6 +387,18 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
   const cstCoco =despesas.filter(d=>d.categoria?.includes("Coco")||d.subcategoria?.includes("Coco")).reduce((s,d)=>s+(d.valor||0),0);
   const cstGado =despesas.filter(d=>d.categoria?.includes("Gado de Corte")||d.categoria?.includes("🐂")).reduce((s,d)=>s+(d.valor||0),0);
 
+  // Histórico de receitas de gado agrupado por mês
+  const recGadoHist = [...receitas]
+    .filter(r=>r.atividade==="Gado Corte")
+    .sort((a,b)=>(a.data||"").localeCompare(b.data||""))
+    .reduce((acc,r)=>{
+      const mes=r.data?new Date(r.data+"T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}):"—";
+      const idx=acc.findIndex(x=>x.mes===mes);
+      if(idx>=0) acc[idx].total+=(r.valor||0);
+      else acc.push({mes,total:r.valor||0});
+      return acc;
+    },[]);
+
   const comp = [
     { ativ:"Cacau",      receita:recCacau, custo:cstCacau, lucro:recCacau-cstCacau, cor:"#d4a017", icon:"🍫" },
     { ativ:"Leite",      receita:recLeite, custo:cstLeite, lucro:recLeite-cstLeite, cor:"#2d6a4f", icon:"🥛" },
