@@ -851,6 +851,7 @@ function ProducaoView({ producao, receitas }) {
 
 // ── MANEJO PECUÁRIO ───────────────────────────────────────
 function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnimaisCorte, vacinas, setVacinas, pastagens, dbAdd, dbUpdate, dbDelete }) {
+  const mob = useResponsive();
   const [tab, setTab] = useState("leiteiro");
   const [modalL,   setModalL]   = useState(false);
   const [editL,    setEditL]    = useState(null);
@@ -863,9 +864,9 @@ function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnim
     <div>
       <SectionHeader title="Manejo Pecuário" sub="Gado leiteiro e gado de corte — agenda sanitária e pastagens"/>
       <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18 }}>
-        <KpiCard label="Gado Leiteiro"    value={`${animaisLeiteiro.reduce((s,a)=>s+a.qtd,0)} cab.`} color="#2d6a4f" icon="🐄" trend={0}/>
+        <KpiCard label="Gado Leiteiro"    value={`${animaisLeiteiro.reduce((s,a)=>s+(a.qtd||1),0)} cab.`} color="#2d6a4f" icon="🐄" trend={0}/>
         <KpiCard label="Gado de Corte"   value={`${animaisCorte.length} cab.`}  color="#457b9d" icon="🐂" trend={0}/>
-        <KpiCard label="Vacinas Pendentes" value={`${vacinas.filter(v=>v.status==="Pendente").length} eventos`} sub="Próx: 10/04/25" color="#e76f51" icon="💉" trend={-1}/>
+        <KpiCard label="Vacinas Pendentes" value={`${vacinas.filter(v=>v.status==="Pendente").length} eventos`} color="#e76f51" icon="💉" trend={-1}/>
         <KpiCard label="Pastagens" value={`${pastagens.length} áreas`} color="#52b788" icon="🌿" trend={0}/>
       </div>
       <TabBar tabs={[{id:"leiteiro",label:"🐄 Gado Leiteiro"},{id:"corte",label:"🐂 Gado de Corte"},{id:"vacinas",label:"💉 Agenda Sanitária"}]} active={tab} onChange={setTab}/>
@@ -906,7 +907,7 @@ function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnim
                       <td style={{...tdS,color:"#6b7280"}}>{a.raca||"—"}</td>
                       <td style={tdS}><span style={{padding:"2px 8px",borderRadius:8,fontSize:11,background:"#f0faf4",color:"#2d6a4f",fontWeight:600}}>{a.categoria||"—"}</span></td>
                       <td style={{...tdS,textAlign:"center",fontWeight:600}}>{a.qtd||1}</td>
-                      <td style={tdS}><span style={{padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,background:a.status==="Saudável"?"#d8f3dc":a.status==="Em Tratamento"?"#fee2e2":a.status==="Gestante"?"#fef3c7":"#f3f4f6",color:a.status==="Saudável"?"#2d6a4f":a.status==="Em Tratamento"?"#dc2626":a.status==="Gestante"?"#b45309":"#6b7280"}}>{a.status||"Saudável"}</span></td>
+                      <td style={tdS}><span style={{padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,background:(a.status||'')==="Saudável"?"#d8f3dc":(a.status||'')==="Em Tratamento"?"#fee2e2":(a.status||'')==="Gestante"?"#fef3c7":"#f3f4f6",color:(a.status||'')==="Saudável"?"#2d6a4f":(a.status||'')==="Em Tratamento"?"#dc2626":(a.status||'')==="Gestante"?"#b45309":"#6b7280"}}>{a.status||"Saudável"}</span></td>
                       <td style={{...tdS,color:"#6b7280"}}>{a.pasto||"—"}</td>
                       <td style={{...tdS,color:"#6b7280"}}>{a.dtEntrada?new Date(a.dtEntrada+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
                       <td style={tdS}>
