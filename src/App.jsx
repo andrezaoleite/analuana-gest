@@ -678,10 +678,10 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
 }
 
 // ── PRODUÇÃO ──────────────────────────────────────────────
-function ProducaoView({ producao }) {
+function ProducaoView({ producao, receitas }) {
   const [tab, setTab] = useState("geral");
-  const cur = [...producao].sort((a,b)=>b.data.localeCompare(a.data))[0]||{};
-  const prv = [...producao].sort((a,b)=>b.data.localeCompare(a.data))[1]||{};
+  const cur = [...producao].sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0]||{};
+  const prv = [...producao].sort((a,b)=>(b.data||"").localeCompare(a.data||""))[1]||{};
   const hist6 = producao.slice(-6);
 
   // Histórico de gado a partir das receitas reais
@@ -767,7 +767,7 @@ function ProducaoView({ producao }) {
           <Card>
             <CardTitle>🥛 Indicadores de Produção Leiteira</CardTitle>
             <div style={{ display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10 }}>
-              {[{l:"Vacas em Lactação",v:"22 cab."},{l:"Média L/vaca/dia",v:`${cur.leiteL?((cur.leiteL/22)/30).toFixed(1):"—"} L`},{l:"CCS Médio",v:"<200 mil"},{l:"Gordura",v:"3,8%"},{l:"Proteína",v:"3,2%"},{l:"Classificação",v:"Tipo A"}].map((ind,i)=>(
+              {[{l:"Produção Último Mês",v:`${(cur.leiteL||0).toLocaleString("pt-BR")} L`},{l:"Média Mensal",v:producao.length>0?`${Math.round(producao.reduce((s,p)=>s+(p.leiteL||0),0)/producao.length).toLocaleString("pt-BR")} L`:"—"},{l:"Total no Período",v:`${producao.reduce((s,p)=>s+(p.leiteL||0),0).toLocaleString("pt-BR")} L`},{l:"Meses Registrados",v:`${producao.length} meses`}].map((ind,i)=>(
                 <div key={i} style={{ padding:12,background:"#f8faf9",borderRadius:8,textAlign:"center" }}>
                   <div style={{ fontSize:14,fontWeight:700,color:"#1a1a2e" }}>{ind.v}</div>
                   <div style={{ fontSize:11,color:"#6b7280" }}>{ind.l}</div>
@@ -788,7 +788,7 @@ function ProducaoView({ producao }) {
         <Card>
           <CardTitle>🥥 Gestão do Coqueiral</CardTitle>
           <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18 }}>
-            {[{l:"Área Plantada",v:"12 ha"},{l:"Plantas Produtivas",v:"480 un"},{l:"Cachos/Planta",v:"8 cachos"},{l:"Cocos/Cacho",v:"10 un"}].map((i,idx)=>(
+            {[{l:"Produção Último Mês",v:`${(cur.cocoUn||0).toLocaleString("pt-BR")} un`},{l:"Média Mensal",v:producao.length>0?`${Math.round(producao.reduce((s,p)=>s+(p.cocoUn||0),0)/producao.length).toLocaleString("pt-BR")} un`:"—"},{l:"Total no Período",v:`${producao.reduce((s,p)=>s+(p.cocoUn||0),0).toLocaleString("pt-BR")} un`},{l:"Meses Registrados",v:`${producao.length} meses`}].map((i,idx)=>(
               <div key={idx} style={{ padding:14,background:"#f8faf9",borderRadius:8,textAlign:"center" }}>
                 <div style={{ fontSize:18,fontWeight:700,color:"#1a1a2e" }}>{i.v}</div>
                 <div style={{ fontSize:12,color:"#6b7280" }}>{i.l}</div>
@@ -826,22 +826,22 @@ function ProducaoView({ producao }) {
               )) : <tr><td colSpan={2} style={{padding:"12px",color:"#9ca3af",textAlign:"center"}}>Nenhuma venda de gado lançada</td></tr>}
             </tbody>
               <tfoot><tr style={{ background:"#1b4332" }}>
-                <td colSpan={4} style={{ padding:"8px 10px",color:"#95d5b2",fontWeight:700 }}>Total 6 meses</td>
+                <td style={{ padding:"8px 10px",color:"#95d5b2",fontWeight:700 }}>Total</td>
                 <td style={{ padding:"8px 10px",color:"white",fontWeight:800 }}>{fmt(recGadoHist.reduce((s,v)=>s+(v.total||0),0))}</td>
               </tr></tfoot>
             </table>
           </Card>
           <Card>
-            <CardTitle>GMD — Ganho de Peso Médio Diário</CardTitle>
-            <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={[{mes:"Out",gmd:0.82},{mes:"Nov",gmd:0.78},{mes:"Dez",gmd:0.91},{mes:"Jan",gmd:0.88},{mes:"Fev",gmd:0.85},{mes:"Mar",gmd:0.93}]}>
+            <CardTitle>🐂 Receita de Gado — histórico</CardTitle>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={recGadoHist}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="mes" tick={{fontSize:11}}/><YAxis domain={[0.6,1.1]} tick={{fontSize:10}} tickFormatter={v=>`${v} kg`}/>
-                <Tooltip formatter={v=>`${v} kg/dia`}/>
-                <Line type="monotone" dataKey="gmd" name="GMD" stroke="#1b4332" strokeWidth={2} dot={{r:4,fill:"#1b4332"}}/>
-              </LineChart>
+                <XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/>
+                <Tooltip formatter={v=>fmt(v)}/>
+                <Bar dataKey="total" name="Receita" fill="#457b9d" radius={[3,3,0,0]}/>
+              </BarChart>
             </ResponsiveContainer>
-            <div style={{ marginTop:10,padding:10,background:"#f0faf4",borderRadius:8,fontSize:12 }}>Meta: 0,9 kg/dia · Atual: <strong style={{ color:"#1b4332" }}>0,93 kg/dia ✅</strong></div>
+            {recGadoHist.length===0&&<div style={{textAlign:"center",color:"#9ca3af",padding:12,fontSize:13}}>Nenhuma venda de gado lançada ainda</div>}
           </Card>
         </div>
       )}
@@ -2846,7 +2846,7 @@ export default function App() {
           {menu==="dashboard"      && <DashboardView funcionarios={funcionarios} producao={producao} despesas={despesas} receitas={receitas} financiamentos={financiamentos} precos={precos}/>}
           {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas} folhas={folhas}/>}
           {menu==="folha"          && <FolhaSalarialView funcionarios={funcionarios} folhas={folhas} setFolhas={setFolhas} dbAdd={dbAdd} setDespesas={setDespesas}/>}
-          {menu==="producao"       && <ProducaoView producao={producao}/>}
+          {menu==="producao"       && <ProducaoView producao={producao} receitas={receitas}/>}
           {menu==="manejo"         && <ManejoView animaisLeiteiro={animaisLeiteiro} setAnimaisLeiteiro={setAnimaisLeiteiro} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} pastagens={pastagens}/>}
           {menu==="pastagens"      && <PastagensView pastagens={pastagens} setPastagens={setPastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="financiamentos" && <FinanciamentosView financiamentos={financiamentos} setFinanciamentos={setFinanciamentos} setDespesas={setDespesas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
