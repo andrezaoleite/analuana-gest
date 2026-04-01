@@ -866,7 +866,11 @@ function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnim
         <KpiCard label="Gado Leiteiro"    value={`${animaisLeiteiro.reduce((s,a)=>s+a.qtd,0)} cab.`} color="#2d6a4f" icon="🐄" trend={0}/>
         <KpiCard label="Gado de Corte"   value={`${animaisCorte.length} cab.`}  color="#457b9d" icon="🐂" trend={0}/>
         <KpiCard label="Vacinas Pendentes" value={`${vacinas.filter(v=>v.status==="Pendente").length} eventos`} sub="Próx: 10/04/25" color="#e76f51" icon="💉" trend={-1}/>
-        <KpiCard label="Pastagens" value={`${pastagens.length} áreas`} sub="1 em descanso" color="#52b788" icon="🌿" trend={0}tab==="leiteiro" && (
+        <KpiCard label="Pastagens" value={`${pastagens.length} áreas`} color="#52b788" icon="🌿" trend={0}/>
+      </div>
+      <TabBar tabs={[{id:"leiteiro",label:"🐄 Gado Leiteiro"},{id:"corte",label:"🐂 Gado de Corte"},{id:"vacinas",label:"💉 Agenda Sanitária"}]} active={tab} onChange={setTab}/>
+
+      {tab==="leiteiro" && (
         <div>
           <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
             <button onClick={()=>{setModalL(true);setEditL(null);setFormL({tipo_registro:"Individual",qtd:1,status:"Saudável",categoria:"Vaca em Lactação"});}} style={{padding:"9px 18px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13}}>
