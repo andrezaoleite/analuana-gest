@@ -850,8 +850,12 @@ function ProducaoView({ producao, receitas }) {
 }
 
 // ── MANEJO PECUÁRIO ───────────────────────────────────────
-function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnimaisCorte, vacinas, setVacinas, pastagens }) {
+function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnimaisCorte, vacinas, setVacinas, pastagens, dbAdd, dbUpdate, dbDelete }) {
   const [tab, setTab] = useState("leiteiro");
+  const [modalL,   setModalL]   = useState(false);
+  const [editL,    setEditL]    = useState(null);
+  const [formL,    setFormL]    = useState({});
+  const [confirmL, setConfirmL] = useState(null);
   const thS = { padding:"9px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,borderBottom:"1px solid #e5e7eb",background:"#f8faf9" };
   const tdS = { padding:"10px 12px",fontSize:12,borderBottom:"1px solid #f3f4f6" };
 
@@ -862,27 +866,94 @@ function ManejoView({ animaisLeiteiro, setAnimaisLeiteiro, animaisCorte, setAnim
         <KpiCard label="Gado Leiteiro"    value={`${animaisLeiteiro.reduce((s,a)=>s+a.qtd,0)} cab.`} color="#2d6a4f" icon="🐄" trend={0}/>
         <KpiCard label="Gado de Corte"   value={`${animaisCorte.length} cab.`}  color="#457b9d" icon="🐂" trend={0}/>
         <KpiCard label="Vacinas Pendentes" value={`${vacinas.filter(v=>v.status==="Pendente").length} eventos`} sub="Próx: 10/04/25" color="#e76f51" icon="💉" trend={-1}/>
-        <KpiCard label="Pastagens" value={`${pastagens.length} áreas`} sub="1 em descanso" color="#52b788" icon="🌿" trend={0}/>
-      </div>
-      <TabBar tabs={[{id:"leiteiro",label:"🐄 Gado Leiteiro"},{id:"corte",label:"🐂 Gado de Corte"},{id:"vacinas",label:"💉 Agenda Sanitária"}]} active={tab} onChange={setTab}/>
+        <KpiCard label="Pastagens" value={`${pastagens.length} áreas`} sub="1 em descanso" color="#52b788" icon="🌿" trend={0}tab==="leiteiro" && (
+        <div>
+          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+            <button onClick={()=>{setModalL(true);setEditL(null);setFormL({tipo_registro:"Individual",qtd:1,status:"Saudável",categoria:"Vaca em Lactação"});}} style={{padding:"9px 18px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13}}>
+              + Cadastrar Animal / Lote
+            </button>
+          </div>
 
-      {tab==="leiteiro" && (
-        <Card style={{ padding:0,overflow:"hidden" }}><div style={{overflowX:"auto"}}>
-          <table style={{ width:"100%",borderCollapse:"collapse",minWidth:480 }}>
-            <thead><tr>{["Lote","Qtd","Status","Pasto Atual","Próx. Vacina"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr></thead>
-            <tbody>{animaisLeiteiro.map((a,i)=>(
-              <tr key={a.id} style={{ background:i%2?"#fafafa":"white" }}>
-                <td style={{...tdS,fontWeight:600}}>{a.lote}</td>
-                <td style={tdS}>{a.qtd} cab.</td>
-                <td style={tdS}><span style={{ padding:"3px 9px",borderRadius:10,fontSize:11,fontWeight:600,background:a.status.includes("Atenção")?"#fff3cd":"#d8f3dc",color:a.status.includes("Atenção")?"#b45309":"#2d6a4f" }}>{a.status}</span></td>
-                <td style={{...tdS,color:"#6b7280"}}>{a.pasto}</td>
-                <td style={{...tdS,color:a.status.includes("Atenção")?"#e76f51":"#374151",fontWeight:a.status.includes("Atenção")?700:400}}>{a.proxVacina}</td>
-              </tr>
-            ))}</tbody>
-          </table></div>
-        </Card>
+          {/* KPIs resumo */}
+          <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:12,marginBottom:14}}>
+            {[
+              ["Em Lactação", animaisLeiteiro.filter(a=>a.categoria==="Vaca em Lactação").reduce((s,a)=>s+(a.qtd||1),0),"#2d6a4f"],
+              ["Vacas Secas",  animaisLeiteiro.filter(a=>a.categoria==="Vaca Seca").reduce((s,a)=>s+(a.qtd||1),0),"#457b9d"],
+              ["Novilhas",     animaisLeiteiro.filter(a=>a.categoria==="Novilha").reduce((s,a)=>s+(a.qtd||1),0),"#d4a017"],
+              ["Total Rebanho",animaisLeiteiro.reduce((s,a)=>s+(a.qtd||1),0),"#1b4332"],
+            ].map(([l,v,c],i)=>(
+              <div key={i} style={{padding:"12px 14px",background:"white",borderRadius:10,boxShadow:"0 1px 3px rgba(0,0,0,0.07)",borderLeft:`3px solid ${c}`}}>
+                <div style={{fontSize:11,color:"#6b7280"}}>{l}</div>
+                <div style={{fontSize:20,fontWeight:700,color:c}}>{v} cab.</div>
+              </div>
+            ))}
+          </div>
+
+          <Card style={{padding:0,overflow:"hidden"}}><div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",minWidth:600}}>
+              <thead><tr>{["Identificação","Tipo","Raça","Categoria","Qtd","Status","Pasto","Entrada","Ações"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr></thead>
+              <tbody>
+                {animaisLeiteiro.length===0
+                  ? <tr><td colSpan={9} style={{padding:20,textAlign:"center",color:"#9ca3af"}}>Nenhum animal cadastrado. Clique em "Cadastrar Animal / Lote" para começar.</td></tr>
+                  : animaisLeiteiro.map((a,i)=>(
+                    <tr key={a.id} style={{background:i%2?"#fafafa":"white"}}>
+                      <td style={{...tdS,fontWeight:600}}>{a.brinco||a.lote||"—"}</td>
+                      <td style={tdS}><span style={{padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,background:a.tipo_registro==="Individual"?"#dbeafe":"#f3e8ff",color:a.tipo_registro==="Individual"?"#1d4ed8":"#7c3aed"}}>{a.tipo_registro||"Individual"}</span></td>
+                      <td style={{...tdS,color:"#6b7280"}}>{a.raca||"—"}</td>
+                      <td style={tdS}><span style={{padding:"2px 8px",borderRadius:8,fontSize:11,background:"#f0faf4",color:"#2d6a4f",fontWeight:600}}>{a.categoria||"—"}</span></td>
+                      <td style={{...tdS,textAlign:"center",fontWeight:600}}>{a.qtd||1}</td>
+                      <td style={tdS}><span style={{padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,background:a.status==="Saudável"?"#d8f3dc":a.status==="Em Tratamento"?"#fee2e2":a.status==="Gestante"?"#fef3c7":"#f3f4f6",color:a.status==="Saudável"?"#2d6a4f":a.status==="Em Tratamento"?"#dc2626":a.status==="Gestante"?"#b45309":"#6b7280"}}>{a.status||"Saudável"}</span></td>
+                      <td style={{...tdS,color:"#6b7280"}}>{a.pasto||"—"}</td>
+                      <td style={{...tdS,color:"#6b7280"}}>{a.dtEntrada?new Date(a.dtEntrada+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                      <td style={tdS}>
+                        <div style={{display:"flex",gap:6}}>
+                          <button onClick={()=>{setEditL(a);setFormL({...a});setModalL(true);}} style={{padding:"5px 10px",background:"none",color:"#2d6a4f",border:"1px solid #b7e4c7",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}}>✏️</button>
+                          <button onClick={()=>setConfirmL({id:a.id,nome:a.brinco||a.lote||"Animal"})} style={{padding:"5px 10px",background:"none",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}}>🗑</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div></Card>
+
+          {/* Modal cadastro/edição */}
+          {modalL&&(
+            <Modal title={editL?"Editar Animal/Lote":"Cadastrar Animal / Lote"} onClose={()=>{setModalL(false);setEditL(null);setFormL({});}} largura={580}>
+              <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:0}}>
+                <Campo label="Tipo de Registro *" value={formL.tipo_registro||"Individual"} onChange={v=>setFormL({...formL,tipo_registro:v})} options={["Individual","Lote"]}/>
+                <Campo label={formL.tipo_registro==="Lote"?"Nome do Lote *":"Brinco / Nº *"} value={formL.brinco||""} onChange={v=>setFormL({...formL,brinco:v})} placeholder={formL.tipo_registro==="Lote"?"Ex: Lote Matrizes A":"Ex: BL-001"}/>
+                {formL.tipo_registro==="Lote"&&<Campo label="Quantidade *" value={formL.qtd||""} onChange={v=>setFormL({...formL,qtd:v})} type="number" placeholder="Ex: 22"/>}
+                <Campo label="Raça *" value={formL.raca||""} onChange={v=>setFormL({...formL,raca:v})} options={["Gir","Girolando","Holandesa","Jersey","Nelore Leiteiro","Mestiça","Outra"]}/>
+                <Campo label="Categoria *" value={formL.categoria||"Vaca em Lactação"} onChange={v=>setFormL({...formL,categoria:v})} options={["Vaca em Lactação","Vaca Seca","Novilha","Bezerra","Touro"]}/>
+                <Campo label="Status Sanitário" value={formL.status||"Saudável"} onChange={v=>setFormL({...formL,status:v})} options={["Saudável","Em Tratamento","Observação","Gestante","Descarte"]}/>
+                <Campo label="Pasto Atual" value={formL.pasto||""} onChange={v=>setFormL({...formL,pasto:v})} placeholder="Ex: Pasto Norte"/>
+                <Campo label="Data de Entrada" value={formL.dtEntrada||""} onChange={v=>setFormL({...formL,dtEntrada:v})} type="date"/>
+                {formL.tipo_registro!=="Lote"&&<Campo label="Próx. Vacina" value={formL.proxVacina||""} onChange={v=>setFormL({...formL,proxVacina:v})} placeholder="Ex: Jul/25"/>}
+              </div>
+              <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:8}}>
+                <button onClick={()=>{setModalL(false);setEditL(null);setFormL({});}} style={{padding:"9px 16px",background:"#f3f4f6",color:"#374151",border:"1px solid #e5e7eb",borderRadius:8,cursor:"pointer",fontSize:13}}>Cancelar</button>
+                <button onClick={()=>{
+                  const item={...formL,id:editL?.id||uid(),qtd:Number(formL.qtd)||1,lote:formL.tipo_registro==="Lote"?formL.brinco:""};
+                  if(editL) dbUpdate("animais_leiteiro",item,setAnimaisLeiteiro);
+                  else dbAdd("animais_leiteiro",item,setAnimaisLeiteiro);
+                  setModalL(false);setEditL(null);setFormL({});
+                }} style={{padding:"9px 18px",background:"#1b4332",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13}}>💾 Salvar</button>
+              </div>
+            </Modal>
+          )}
+
+          {/* Confirmar exclusão */}
+          {confirmL&&(
+            <Confirm msg={`Excluir "${confirmL.nome}"?`} danger={true}
+              onSim={()=>{dbDelete("animais_leiteiro",confirmL.id,setAnimaisLeiteiro);setConfirmL(null);}}
+              onNao={()=>setConfirmL(null)}/>
+          )}
+        </div>
+      
+
       )}
-
       {tab==="corte" && (
         <Card style={{ padding:0,overflow:"hidden" }}><div style={{overflowX:"auto"}}>
           <table style={{ width:"100%",borderCollapse:"collapse",minWidth:480 }}>
@@ -2728,7 +2799,7 @@ export default function App() {
     producao:         ["id","data","mes","cacau_kg","leite_l","coco_un","responsavel"],
     despesas:         ["id","data","categoria","subcategoria","valor","descricao","fornecedor","nf"],
     receitas:         ["id","data","atividade","valor","qtd","unitario","comprador","obs"],
-    animais_leiteiro: ["id","brinco","lote","qtd","status","prox_vacina","pasto"],
+    animais_leiteiro: ["id","brinco","lote","qtd","status","prox_vacina","pasto","raca","categoria","dt_entrada","tipo_registro"],
     animais_corte:    ["id","brinco","categoria","peso_prev","peso_atual","dt_entrada","previsao_abate","pasto","status","custo_aquisicao"],
     vacinas:          ["id","data","rebanho","lote","vacina","qtd","custo","status"],
     pastagens:        ["id","nome","area","capacidade","atual","tipo","status","capim","dt_plantio","obs"],
@@ -2847,7 +2918,7 @@ export default function App() {
           {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas} folhas={folhas}/>}
           {menu==="folha"          && <FolhaSalarialView funcionarios={funcionarios} folhas={folhas} setFolhas={setFolhas} dbAdd={dbAdd} setDespesas={setDespesas}/>}
           {menu==="producao"       && <ProducaoView producao={producao} receitas={receitas}/>}
-          {menu==="manejo"         && <ManejoView animaisLeiteiro={animaisLeiteiro} setAnimaisLeiteiro={setAnimaisLeiteiro} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} pastagens={pastagens}/>}
+          {menu==="manejo"         && <ManejoView animaisLeiteiro={animaisLeiteiro} setAnimaisLeiteiro={setAnimaisLeiteiro} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} pastagens={pastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="pastagens"      && <PastagensView pastagens={pastagens} setPastagens={setPastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="financiamentos" && <FinanciamentosView financiamentos={financiamentos} setFinanciamentos={setFinanciamentos} setDespesas={setDespesas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
           {menu==="lancamentos"    && <LancamentosView producao={producao} setProducao={setProducao} despesas={despesas} setDespesas={setDespesas} receitas={receitas} setReceitas={setReceitas} funcionarios={funcionarios} setFuncionarios={setFuncionarios} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
