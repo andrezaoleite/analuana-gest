@@ -543,7 +543,7 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
             <KpiCard label="Receita Venda" value={fmt(recGado)}  color="#457b9d" icon="🐂" trend={1}/>
             <KpiCard label="Custo Corte"   value={fmt(cstGado)}  color="#e76f51" icon="📋" trend={0}/>
             <KpiCard label="Lucro Corte"   value={fmt(recGado-cstGado)} color={recGado-cstGado>=0?"#2d6a4f":"#e76f51"} icon="📈" trend={recGado-cstGado>=0?1:-1}/>
-            <KpiCard label="R$/Arroba"     value="R$ 325,00"     color="#d4a017" icon="📊" trend={0}/>
+            <KpiCard label="R$/Arroba" value={precos?.precoArroba?`R$ ${Number(precos.precoArroba).toLocaleString("pt-BR",{minimumFractionDigits:2})}`:fmt(recGado>0&&animaisCorte.length>0?(recGado/(animaisCorte.reduce((s,a)=>s+(a.pesoAtual||0),0)/15)):0)} color="#d4a017" icon="📊" trend={0}/>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"2fr 1fr",gap:14 }}>
             <Card>
@@ -555,9 +555,9 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
               </ResponsiveContainer>
             </Card>
             <Card>
-              <CardTitle>Arrobas vendidas</CardTitle>
+              <CardTitle>Receita por período</CardTitle>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={recGadoHist}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}}/><Tooltip formatter={v=>fmt(v)}/><Bar dataKey="total" name="Receita" fill="#d4a017" radius={[3,3,0,0]}/></BarChart>
+                <BarChart data={recGadoHist}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/><Tooltip formatter={v=>fmt(v)}/><Bar dataKey="total" name="Receita" fill="#d4a017" radius={[3,3,0,0]}/></BarChart>
               </ResponsiveContainer>
             </Card>
           </div>
@@ -735,13 +735,14 @@ function ProducaoView({ producao, receitas }) {
             </Card>
           ))}
           <Card>
-            <CardTitle>🐂 Gado Corte — arrobas e receita</CardTitle>
+          <Card>
+            <CardTitle>🐂 Gado Corte — receita histórica</CardTitle>
             <ResponsiveContainer width="100%" height={150}>
-              <BarChart data={recGadoHist}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}}/><Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:10}}/>
-                <Bar dataKey="arrobas" name="Arrobas" fill="#457b9d" radius={[3,3,0,0]}/>
-                <Bar dataKey="cabecas" name="Cabeças" fill="#1b4332" radius={[3,3,0,0]}/>
+              <BarChart data={recGadoHist}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/><Tooltip formatter={v=>fmt(v)}/>
+                <Bar dataKey="total" name="Receita" fill="#457b9d" radius={[3,3,0,0]}/>
               </BarChart>
             </ResponsiveContainer>
+            {recGadoHist.length===0&&<div style={{textAlign:"center",color:"#9ca3af",padding:8,fontSize:12}}>Sem vendas de gado lançadas</div>}
           </Card>
         </div>
       )}
