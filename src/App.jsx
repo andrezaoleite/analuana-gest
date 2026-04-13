@@ -56,6 +56,8 @@ const CATEGORIAS_DESPESA = {
   "Manutenção": ["Equipamentos","Benfeitorias","Veículos"],
   "Tributos": ["ITR","Funrural","INSS Produtor","SENAR Rural","Contribuição Sindical"],
   "Energia": ["Energia Elétrica"],
+  "Contabilidade": ["Honorários Contábeis","Declarações","Outros Contabilidade"],
+  "Prestador de Serviço": ["Mão de Obra Avulsa","Serviço Terceirizado","Consultoria","Outros Serviços"],
   "Outros": ["Outros"],
 };
 
@@ -568,34 +570,95 @@ function DashboardView({ funcionarios, producao, despesas, receitas, financiamen
 }
 
 // ── FINANCEIRO ────────────────────────────────────────────
-function FinanceiroView({ funcionarios, despesas, receitas }) {
+function FinanceiroView({ funcionarios, despesas, receitas, folhas, config }) {
+  const mob = useResponsive();
   const [tab, setTab] = useState("encargos");
 
-  const totalSalBruto = 0;
-  const totalSalFam   = 0;
-  const totalINSSEmp  = 0;
-  const totalEncPatr  = 0;
-  const totalFolha    = 0;
+  // ── Filtro de período ──────────────────────────────────────────────────
+  const hoje = () => new Date().toISOString().slice(0,10);
+  const primeiroDiaMes = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; };
+  const [dtIni, setDtIni] = useState(primeiroDiaMes());
+  const [dtFim, setDtFim] = useState(hoje());
+  const [modoFiltro, setModoFiltro] = useState("mes"); // "mes" | "periodo"
+
+  // Mês rápido — ao mudar, ajusta dtIni e dtFim
+  const mudarMes = (ym) => {
+    if(!ym) return;
+    const [y,m] = ym.split("-").map(Number);
+    const fim = new Date(y, m, 0).getDate(); // último dia do mês
+    setDtIni(`${ym}-01`);
+    setDtFim(`${ym}-${String(fim).padStart(2,'0')}`);
+  };
+  const mesAtual = dtIni ? dtIni.slice(0,7) : "";
+
+  // Filtrar por período
+  const filtrar = arr => (arr||[]).filter(x => {
+    const d = x.data||"";
+    return d >= dtIni && d <= dtFim;
+  });
+
+  const despFilt = filtrar(despesas);
+  const recFilt  = filtrar(receitas);
+
+  // ── Totais da folha no período ─────────────────────────────────────────
+  const folhasFilt = (folhas||[]).filter(f => {
+    const d = `${f.ano}-${String(f.mes).padStart(2,'0')}-01`;
+    return d >= dtIni && d <= dtFim;
+  });
+  const totalSalBruto = folhasFilt.reduce((s,f)=>(f.itens||[]).reduce((si,it)=>si+(it.salarioBruto||0),s),0);
+  const totalFGTS     = folhasFilt.reduce((s,f)=>(f.itens||[]).reduce((si,it)=>si+(it.fgts||0),s),0);
+  const totalEncPatr  = totalSalBruto*0.20 + totalFGTS + totalSalBruto*0.01 + totalSalBruto*0.02;
+  const totalFolha    = folhasFilt.reduce((s,f)=>(f.itens||[]).reduce((si,it)=>si+(it.custoEmpresa||0),s),0);
 
   const thS = { padding:"9px 12px",textAlign:"left",fontSize:11,color:"#6b7280",fontWeight:600,borderBottom:"1px solid #e5e7eb",background:"#f8faf9" };
   const tdS = { padding:"10px 12px",fontSize:12,borderBottom:"1px solid #f3f4f6" };
 
+  // ── Agrupamento de despesas (Number() garante soma, não concatenação) ──
+  const grpDesp = Object.entries(
+    despFilt.reduce((a,d)=>{ a[d.categoria]=(a[d.categoria]||0)+Number(d.valor||0); return a; },{})
+  ).sort((a,b)=>b[1]-a[1]);
+  const totalDesp = grpDesp.reduce((s,[,v])=>s+v, 0);
+  const totalRec  = recFilt.reduce((s,r)=>s+Number(r.valor||0), 0);
+
+  // ── Selector de período (reutilizado em todas as abas) ─────────────────
+  const FiltroPeriodo = () => (
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap",padding:"12px 16px",background:"#f8faf9",borderRadius:10,border:"1px solid #e5e7eb"}}>
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={()=>setModoFiltro("mes")}  style={{padding:"6px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:600,fontSize:12,background:modoFiltro==="mes"?"#1b4332":"#e5e7eb",color:modoFiltro==="mes"?"white":"#374151"}}>Por mês</button>
+        <button onClick={()=>setModoFiltro("periodo")} style={{padding:"6px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:600,fontSize:12,background:modoFiltro==="periodo"?"#1b4332":"#e5e7eb",color:modoFiltro==="periodo"?"white":"#374151"}}>Período</button>
+      </div>
+      {modoFiltro==="mes"
+        ? <input type="month" value={mesAtual} onChange={e=>mudarMes(e.target.value)} style={{padding:"6px 10px",border:"1px solid #d1d5db",borderRadius:7,fontSize:13}}/>
+        : <>
+            <input type="date" value={dtIni} onChange={e=>setDtIni(e.target.value)} style={{padding:"6px 10px",border:"1px solid #d1d5db",borderRadius:7,fontSize:13}}/>
+            <span style={{color:"#6b7280",fontSize:12}}>até</span>
+            <input type="date" value={dtFim} onChange={e=>setDtFim(e.target.value)} style={{padding:"6px 10px",border:"1px solid #d1d5db",borderRadius:7,fontSize:13}}/>
+          </>
+      }
+      <div style={{marginLeft:"auto",fontSize:12,color:"#6b7280"}}>
+        {despFilt.length} despesas · {recFilt.length} receitas · {folhasFilt.length} folhas
+      </div>
+    </div>
+  );
+
   return (
     <div>
-      <SectionHeader title="Módulo Financeiro" sub="Folha de pagamento, encargos, tributos, despesas e receitas"/>
-      <div style={{padding:"12px 16px",background:"#f0faf4",borderRadius:10,marginBottom:18,fontSize:13,color:"#1b4332",display:"flex",alignItems:"center",gap:10}}>
-        <span style={{fontSize:20}}>📋</span>
-        <span>Os valores da folha de pagamento agora são gerados no módulo <strong>Folha Salarial</strong>. Aqui você consulta encargos, tributos, despesas e receitas.</span>
-      </div>
+      <SectionHeader title="Módulo Financeiro" sub="Encargos, tributos, despesas e receitas por período"/>
+      <FiltroPeriodo/>
       <TabBar tabs={[{id:"encargos",label:"Encargos"},{id:"tributos",label:"Tributos"},{id:"despesas",label:"Despesas"},{id:"receitas",label:"Receitas"}]} active={tab} onChange={setTab}/>
 
       {tab==="encargos" && (
         <Card>
-          <CardTitle>Composição dos Encargos Patronais</CardTitle>
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
+          <CardTitle>Encargos Patronais — baseado na folha do período</CardTitle>
+          {totalSalBruto===0&&(
+            <div style={{padding:"12px 16px",background:"#fef3c7",borderRadius:8,marginBottom:14,fontSize:13,color:"#92400e"}}>
+              ⚠️ Nenhuma folha no período selecionado. Gere folhas no módulo <strong>Folha Salarial</strong> para ver os encargos calculados.
+            </div>
+          )}
+          <div style={{ display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(3,1fr)",gap:12 }}>
             {[
               { lbl:"INSS Patronal",       perc:"20,0%", val:totalSalBruto*0.20,   desc:"Previdência Social"  },
-              { lbl:"FGTS",                perc:" 8,0%", val:totalSalBruto*0.08,   desc:"Fundo de Garantia"   },
+              { lbl:"FGTS",                perc:" 8,0%", val:totalFGTS,             desc:"Fundo de Garantia"   },
               { lbl:"RAT/SAT",             perc:" 1,0%", val:totalSalBruto*0.01,   desc:"Acidente de trabalho"},
               { lbl:"SENAR",               perc:" 2,0%", val:totalSalBruto*0.02,   desc:"Contribuição rural"  },
               { lbl:"Provisão Férias+1/3", perc:"11,1%", val:totalSalBruto*0.1111, desc:"Provisão mensal"     },
@@ -610,7 +673,10 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
             ))}
           </div>
           <div style={{ marginTop:14,padding:14,background:"#1b4332",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-            <span style={{ color:"#95d5b2",fontWeight:600 }}>Total Encargos/mês</span>
+            <div>
+              <div style={{color:"#95d5b2",fontWeight:600,fontSize:13}}>Total Encargos no período</div>
+              <div style={{color:"#d8f3dc",fontSize:11,marginTop:2}}>Salário bruto: {fmt(totalSalBruto)} · Custo total empresa: {fmt(totalFolha)}</div>
+            </div>
             <span style={{ color:"white",fontSize:20,fontWeight:800 }}>{fmt(totalEncPatr)}</span>
           </div>
         </Card>
@@ -618,19 +684,27 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
 
       {tab==="tributos" && (
         <Card>
-          <CardTitle>Tributos da Atividade Rural</CardTitle>
-          {[
-            { tributo:"ITR",                           base:"Valor da terra nua",      venc:"30/11/2025", valor:1200, freq:"Anual"  },
-            { tributo:"Contribuição Sindical Rural",   base:"Patrimônio declarado",    venc:"31/01/2025", valor:850,  freq:"Anual"  },
-            { tributo:"Funrural – RGPS",               base:"1,5% receita bruta",      venc:"Mensal",     valor:705,  freq:"Mensal" },
-            { tributo:"INSS Produtor Rural",           base:"2,1% receita bruta",      venc:"Mensal",     valor:987,  freq:"Mensal" },
-            { tributo:"SENAR",                         base:"0,2% comerc. rural",      venc:"Mensal",     valor:94,   freq:"Mensal" },
-          ].map((t,i)=>(
-            <div key={i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid #f3f4f6" }}>
-              <div><div style={{ fontSize:14,fontWeight:600,color:"#1a1a2e" }}>{t.tributo}</div><div style={{ fontSize:12,color:"#6b7280" }}>Base: {t.base} · Venc: {t.venc}</div></div>
-              <div style={{ textAlign:"right" }}><div style={{ fontSize:15,fontWeight:700,color:"#e76f51" }}>{fmt(t.valor)}</div><div style={{ fontSize:11,color:"#9ca3af" }}>{t.freq}</div></div>
-            </div>
-          ))}
+          <CardTitle>Tributos — despesas lançadas no período</CardTitle>
+          {despFilt.filter(d=>(d.categoria||"").includes("Tributo")).length===0
+            ? <div style={{padding:20,textAlign:"center",color:"#9ca3af",fontSize:13}}>Nenhum tributo lançado no período. Lance em Lançamentos → Despesas com categoria "Tributos".</div>
+            : <>
+                {despFilt.filter(d=>(d.categoria||"").includes("Tributo")).map((t,i)=>(
+                  <div key={i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid #f3f4f6" }}>
+                    <div>
+                      <div style={{ fontSize:14,fontWeight:600,color:"#1a1a2e" }}>{t.subcategoria||t.descricao||t.categoria}</div>
+                      <div style={{ fontSize:12,color:"#6b7280" }}>{t.data} · {t.descricao}</div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:15,fontWeight:700,color:"#e76f51" }}>{fmt(Number(t.valor||0))}</div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{marginTop:12,padding:"10px 0",borderTop:"2px solid #1b4332",display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontWeight:700,color:"#1b4332"}}>Total tributos</span>
+                  <span style={{fontWeight:800,color:"#e76f51"}}>{fmt(despFilt.filter(d=>(d.categoria||"").includes("Tributo")).reduce((s,t)=>s+Number(t.valor||0),0))}</span>
+                </div>
+              </>
+          }
         </Card>
       )}
 
@@ -638,23 +712,38 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
           <Card>
             <CardTitle>Despesas por categoria</CardTitle>
-            {Object.entries(despesas.reduce((a,d)=>{ a[d.categoria]=(a[d.categoria]||0)+d.valor; return a; },{})).sort((a,b)=>b[1]-a[1]).map(([cat,val],i)=>(
-              <div key={i} style={{ marginBottom:10 }}>
-                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:3 }}><span style={{ fontSize:12,color:"#374151" }}>{cat}</span><span style={{ fontSize:12,fontWeight:700 }}>{fmt(val)}</span></div>
-                <div style={{ height:6,background:"#f3f4f6",borderRadius:3 }}><div style={{ height:"100%",width:`${(val/despesas.reduce((s,d)=>s+d.valor,0))*100}%`,background:COLORS[i%8],borderRadius:3 }}/></div>
-              </div>
-            ))}
+            {grpDesp.length===0
+              ? <div style={{padding:20,textAlign:"center",color:"#9ca3af",fontSize:13}}>Nenhuma despesa no período.</div>
+              : grpDesp.map(([cat,val],i)=>(
+                <div key={i} style={{ marginBottom:10 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:3 }}>
+                    <span style={{ fontSize:12,color:"#374151" }}>{cat}</span>
+                    <span style={{ fontSize:12,fontWeight:700 }}>{fmt(val)}</span>
+                  </div>
+                  <div style={{ height:6,background:"#f3f4f6",borderRadius:3 }}>
+                    <div style={{ height:"100%",width:`${totalDesp>0?(val/totalDesp)*100:0}%`,background:COLORS[i%8],borderRadius:3 }}/>
+                  </div>
+                </div>
+              ))
+            }
+            {totalDesp>0&&<div style={{marginTop:12,padding:"10px 0",borderTop:"2px solid #1b4332",display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontWeight:700,color:"#1b4332"}}>Total despesas</span>
+              <span style={{fontWeight:800,color:"#e76f51"}}>{fmt(totalDesp)}</span>
+            </div>}
           </Card>
           <Card>
-            <CardTitle>Gráfico de despesas</CardTitle>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={Object.entries(despesas.reduce((a,d)=>{ a[d.categoria]=(a[d.categoria]||0)+d.valor; return a; },{})).map(([name,value])=>({name:name.replace(/[🐂🥛]/g,""),value}))} cx="50%" cy="48%" outerRadius={90} dataKey="value" label={({percent})=>`${(percent*100).toFixed(0)}%`} labelLine={false}>
-                  {despesas.map((_,i)=><Cell key={i} fill={COLORS[i%8]}/>)}
-                </Pie>
-                <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
-              </PieChart>
-            </ResponsiveContainer>
+            <CardTitle>Distribuição de despesas</CardTitle>
+            {grpDesp.length===0
+              ? <div style={{padding:20,textAlign:"center",color:"#9ca3af",fontSize:13}}>Nenhuma despesa no período.</div>
+              : <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={grpDesp.map(([name,value])=>({name:name.replace(/[🐂🥛]/g,""),value}))} cx="50%" cy="48%" outerRadius={90} dataKey="value" label={({percent})=>`${(percent*100).toFixed(0)}%`} labelLine={false}>
+                      {grpDesp.map((_,i)=><Cell key={i} fill={COLORS[i%8]}/>)}
+                    </Pie>
+                    <Tooltip formatter={v=>fmt(v)}/><Legend wrapperStyle={{fontSize:11}}/>
+                  </PieChart>
+                </ResponsiveContainer>
+            }
           </Card>
         </div>
       )}
@@ -664,21 +753,24 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
           <table style={{ width:"100%",borderCollapse:"collapse",minWidth:480 }}>
             <thead><tr>{["Data","Atividade","Qtd/Detalhes","Unitário","Valor","Comprador"].map((h,i)=><th key={i} style={thS}>{h}</th>)}</tr></thead>
             <tbody>
-              {[...receitas].sort((a,b)=>b.data.localeCompare(a.data)).map((r,i)=>(
-                <tr key={r.id} style={{ background:i%2?"#fafafa":"white" }}>
-                  <td style={{...tdS,color:"#6b7280"}}>{r.data}</td>
-                  <td style={{...tdS,fontWeight:600,color:"#1b4332"}}>{r.atividade}</td>
-                  <td style={tdS}>{r.qtd}</td>
-                  <td style={tdS}>{r.unitario}</td>
-                  <td style={{...tdS,fontWeight:700,color:"#2d6a4f"}}>{fmt(r.valor)}</td>
-                  <td style={{...tdS,color:"#6b7280"}}>{r.comprador}</td>
-                </tr>
-              ))}
+              {recFilt.length===0
+                ? <tr><td colSpan={6} style={{padding:20,textAlign:"center",color:"#9ca3af"}}>Nenhuma receita no período.</td></tr>
+                : [...recFilt].sort((a,b)=>(b.data||"").localeCompare(a.data||"")).map((r,i)=>(
+                  <tr key={r.id} style={{ background:i%2?"#fafafa":"white" }}>
+                    <td style={{...tdS,color:"#6b7280"}}>{r.data}</td>
+                    <td style={{...tdS,fontWeight:600,color:"#1b4332"}}>{r.atividade}</td>
+                    <td style={tdS}>{r.qtd}</td>
+                    <td style={tdS}>{r.unitario}</td>
+                    <td style={{...tdS,fontWeight:700,color:"#2d6a4f"}}>{fmt(Number(r.valor||0))}</td>
+                    <td style={{...tdS,color:"#6b7280"}}>{r.comprador}</td>
+                  </tr>
+                ))
+              }
             </tbody>
             <tfoot>
               <tr style={{ background:"#1b4332" }}>
-                <td colSpan={4} style={{ padding:"10px 12px",color:"#95d5b2",fontWeight:700 }}>Total Receitas</td>
-                <td style={{ padding:"10px 12px",color:"white",fontWeight:800 }}>{fmt(receitas.reduce((s,r)=>s+r.valor,0))}</td>
+                <td colSpan={4} style={{ padding:"10px 12px",color:"#95d5b2",fontWeight:700 }}>Total Receitas no período</td>
+                <td style={{ padding:"10px 12px",color:"white",fontWeight:800 }}>{fmt(totalRec)}</td>
                 <td/>
               </tr>
             </tfoot>
@@ -689,7 +781,7 @@ function FinanceiroView({ funcionarios, despesas, receitas }) {
   );
 }
 
-// ── PRODUÇÃO ──────────────────────────────────────────────
+
 function ProducaoView({ producao, receitas }) {
   const [tab, setTab] = useState("geral");
   const cur = [...producao].sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0]||{};
@@ -2417,9 +2509,11 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
   const [anoRef,  setAnoRef]  = useState(anoAtual);
   const [trimestreRef, setTrimestreRef] = useState(Math.ceil((new Date().getMonth()+1)/3));
   const [semestreRef, setSemestreRef]   = useState(new Date().getMonth()<6?1:2);
+  const [mesRef, setMesRef]             = useState(new Date().getMonth()+1);
 
   // ── Definir meses do período ─────────────────────────────
   const getMeses = () => {
+    if(periodo==="mensal")     return [{mes:mesRef, ano:anoRef}];
     if(periodo==="anual")      return Array.from({length:12},(_,i)=>({mes:i+1,ano:anoRef}));
     if(periodo==="semestral"){
       const ini = semestreRef===1?1:7;
@@ -2430,7 +2524,8 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
     return Array.from({length:3},(_,i)=>({mes:ini+i,ano:anoRef}));
   };
   const mesesPeriodo = getMeses();
-  const labelPeriodo = periodo==="anual"?`Ano ${anoRef}`:
+  const labelPeriodo = periodo==="mensal"?`${MESES[mesRef-1]} ${anoRef}`:
+    periodo==="anual"?`Ano ${anoRef}`:
     periodo==="semestral"?`${semestreRef}º Semestre ${anoRef}`:
     `${trimestreRef}º Trimestre ${anoRef}`;
 
@@ -2515,7 +2610,7 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
         <div>
           <label style={{display:"block",fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>PERÍODO</label>
           <div style={{display:"flex",gap:0,borderRadius:8,overflow:"hidden",border:"1px solid #e5e7eb"}}>
-            {[["trimestral","Trimestral"],["semestral","Semestral"],["anual","Anual"]].map(([v,l])=>(
+            {[["mensal","Mensal"],["trimestral","Trimestral"],["semestral","Semestral"],["anual","Anual"]].map(([v,l])=>(
               <button key={v} onClick={()=>setPeriodo(v)} style={{padding:"8px 14px",border:"none",cursor:"pointer",fontSize:13,fontWeight:periodo===v?700:400,background:periodo===v?"#1b4332":"white",color:periodo===v?"white":"#374151"}}>{l}</button>
             ))}
           </div>
@@ -2526,6 +2621,14 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
             {[anoAtual-2,anoAtual-1,anoAtual].map(a=><option key={a} value={a}>{a}</option>)}
           </select>
         </div>
+        {periodo==="mensal"&&(
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>MÊS</label>
+            <select value={mesRef} onChange={e=>setMesRef(Number(e.target.value))} style={{padding:"8px 12px",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13}}>
+              {MESES.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+            </select>
+          </div>
+        )}
         {periodo==="trimestral"&&(
           <div>
             <label style={{display:"block",fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>TRIMESTRE</label>
@@ -2941,7 +3044,7 @@ export default function App() {
         )}
         <div style={{ flex:1,overflow:"auto",padding:mob?14:22 }}>
           {menu==="dashboard"      && <DashboardView funcionarios={funcionarios} producao={producao} despesas={despesas} receitas={receitas} financiamentos={financiamentos} precos={precos}/>}
-          {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas} folhas={folhas}/>}
+          {menu==="financeiro"     && <FinanceiroView funcionarios={funcionarios} despesas={despesas} receitas={receitas} folhas={folhas} config={config}/>}
           {menu==="folha"          && <FolhaSalarialView funcionarios={funcionarios} folhas={folhas} setFolhas={setFolhas} dbAdd={dbAdd} setDespesas={setDespesas}/>}
           {menu==="producao"       && <ProducaoView producao={producao} receitas={receitas}/>}
           {menu==="manejo"         && <ManejoView animaisLeiteiro={animaisLeiteiro} setAnimaisLeiteiro={setAnimaisLeiteiro} animaisCorte={animaisCorte} setAnimaisCorte={setAnimaisCorte} vacinas={vacinas} setVacinas={setVacinas} pastagens={pastagens} dbAdd={dbAdd} dbUpdate={dbUpdate} dbDelete={dbDelete}/>}
