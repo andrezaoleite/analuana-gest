@@ -827,7 +827,6 @@ function ProducaoView({ producao, receitas }) {
             </Card>
           ))}
           <Card>
-          <Card>
             <CardTitle>🐂 Gado Corte — receita histórica</CardTitle>
             <ResponsiveContainer width="100%" height={150}>
               <BarChart data={recGadoHist}><XAxis dataKey="mes" tick={{fontSize:10}}/><YAxis tick={{fontSize:9}} tickFormatter={v=>`R$${(v/1000).toFixed(0)}k`}/><Tooltip formatter={v=>fmt(v)}/>
