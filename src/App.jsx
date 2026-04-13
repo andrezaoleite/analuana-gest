@@ -2504,7 +2504,7 @@ function FolhaSalarialView({ funcionarios, folhas, setFolhas, dbAdd, setDespesas
 function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, config, precos }) {
   const mob = useResponsive();
   const anoAtual = new Date().getFullYear();
-  const [periodo, setPeriodo] = useState("trimestral");
+  const [periodo, setPeriodo] = useState("mensal");
   const [anoRef,  setAnoRef]  = useState(anoAtual);
   const [trimestreRef, setTrimestreRef] = useState(Math.ceil((new Date().getMonth()+1)/3));
   const [semestreRef, setSemestreRef]   = useState(new Date().getMonth()<6?1:2);
@@ -2534,24 +2534,33 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
   // ── Filtrar dados do período ─────────────────────────────
   const noMes = (dataStr, m, a) => {
     if(!dataStr) return false;
-    const d = new Date(dataStr+"T12:00:00");
-    return d.getMonth()+1===m && d.getFullYear()===a;
+    // Pegar só os 10 primeiros chars (YYYY-MM-DD) para ignorar timezone
+    const s = String(dataStr).slice(0,10);
+    if(s.length < 10) return false;
+    const [y, mo] = s.split("-").map(Number);
+    return mo === m && y === a;
   };
 
   const dadosPorMes = mesesPeriodo.map(({mes,ano}) => {
     const recMes   = receitas.filter(r => noMes(r.data,mes,ano));
     const despMes  = despesas.filter(d => noMes(d.data,mes,ano));
     const prodMes  = producao.filter(p => noMes(p.data,mes,ano));
-    const recCacau = prodMes.reduce((s,p)=>s+(p.cacauKg||0)*PC,0);
-    const recLeite = prodMes.reduce((s,p)=>s+(p.leiteL||0)*PL,0);
-    const recCoco  = prodMes.reduce((s,p)=>s+(p.cocoUn||0)*PCO,0);
-    const recGado  = recMes.filter(r=>r.atividade==="Gado Corte").reduce((s,r)=>s+(r.valor||0),0);
-    const recTotal = recCacau+recLeite+recCoco+recGado;
+    // Receitas reais lançadas por atividade
+    const recCacau = recMes.filter(r=>r.atividade==="Cacau").reduce((s,r)=>s+Number(r.valor||0),0);
+    const recLeite = recMes.filter(r=>r.atividade==="Leite").reduce((s,r)=>s+Number(r.valor||0),0);
+    const recCoco  = recMes.filter(r=>r.atividade==="Coco").reduce((s,r)=>s+Number(r.valor||0),0);
+    const recGado  = recMes.filter(r=>r.atividade==="Gado Corte").reduce((s,r)=>s+Number(r.valor||0),0);
+    const recOutras= recMes.filter(r=>!["Cacau","Leite","Coco","Gado Corte"].includes(r.atividade)).reduce((s,r)=>s+Number(r.valor||0),0);
+    const recTotal = recCacau+recLeite+recCoco+recGado+recOutras;
+    // Produção física do mês (informativa)
+    const prodCacauKg = prodMes.reduce((s,p)=>s+(p.cacauKg||0),0);
+    const prodLeiteL  = prodMes.reduce((s,p)=>s+(p.leiteL||0),0);
+    const prodCocoUn  = prodMes.reduce((s,p)=>s+(p.cocoUn||0),0);
     const despTotal= despMes.reduce((s,d)=>s+(d.valor||0),0);
     return {
       mes, ano,
       label: MESES[mes-1].slice(0,3)+"/"+String(ano).slice(2),
-      recTotal, recCacau, recLeite, recCoco, recGado,
+      recTotal, recCacau, recLeite, recCoco, recGado, recOutras, prodCacauKg, prodLeiteL, prodCocoUn,
       despTotal, lucro: recTotal-despTotal,
       despPorCat: despMes.reduce((a,d)=>{a[d.categoria]=(a[d.categoria]||0)+(d.valor||0);return a;},{}),
     };
@@ -2572,10 +2581,11 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
 
   // Receitas por atividade no período
   const recPizza = [
-    {name:"🍫 Cacau", value:dadosPorMes.reduce((s,m)=>s+m.recCacau,0)},
+    {name:"🍫 Cacau",  value:dadosPorMes.reduce((s,m)=>s+m.recCacau,0)},
     {name:"🥛 Leite",  value:dadosPorMes.reduce((s,m)=>s+m.recLeite,0)},
     {name:"🥥 Coco",   value:dadosPorMes.reduce((s,m)=>s+m.recCoco,0)},
     {name:"🐂 Gado",   value:dadosPorMes.reduce((s,m)=>s+m.recGado,0)},
+    {name:"Outros",    value:dadosPorMes.reduce((s,m)=>s+m.recOutras,0)},
   ].filter(x=>x.value>0);
 
   // Evolução da dívida (saldo devedor de cada financiamento)
