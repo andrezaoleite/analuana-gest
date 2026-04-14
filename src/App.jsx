@@ -2556,26 +2556,26 @@ function RelatorioView({ producao, despesas, receitas, folhas, financiamentos, c
     const prodCacauKg = prodMes.reduce((s,p)=>s+(p.cacauKg||0),0);
     const prodLeiteL  = prodMes.reduce((s,p)=>s+(p.leiteL||0),0);
     const prodCocoUn  = prodMes.reduce((s,p)=>s+(p.cocoUn||0),0);
-    const despTotal= despMes.reduce((s,d)=>s+(d.valor||0),0);
+    const despTotal= despMes.reduce((s,d)=>s+Number(d.valor||0),0);
     return {
       mes, ano,
       label: MESES[mes-1].slice(0,3)+"/"+String(ano).slice(2),
       recTotal, recCacau, recLeite, recCoco, recGado, recOutras, prodCacauKg, prodLeiteL, prodCocoUn,
       despTotal, lucro: recTotal-despTotal,
-      despPorCat: despMes.reduce((a,d)=>{a[d.categoria]=(a[d.categoria]||0)+(d.valor||0);return a;},{}),
+      despPorCat: despMes.reduce((a,d)=>{a[d.categoria]=(a[d.categoria]||0)+Number(d.valor||0);return a;},{}),
     };
   });
 
   // Totais do período
-  const totRec  = dadosPorMes.reduce((s,m)=>s+m.recTotal,0);
-  const totDesp = dadosPorMes.reduce((s,m)=>s+m.despTotal,0);
+  const totRec  = dadosPorMes.reduce((s,m)=>s+Number(m.recTotal||0),0);
+  const totDesp = dadosPorMes.reduce((s,m)=>s+Number(m.despTotal||0),0);
   const totLuc  = totRec-totDesp;
 
   // Despesas por categoria no período
   const despPorCatPeriodo = {};
   dadosPorMes.forEach(m => {
     Object.entries(m.despPorCat).forEach(([cat,val])=>{
-      despPorCatPeriodo[cat]=(despPorCatPeriodo[cat]||0)+val;
+      despPorCatPeriodo[cat]=(despPorCatPeriodo[cat]||0)+Number(val||0);
     });
   });
 
